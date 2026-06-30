@@ -1,0 +1,30 @@
+# OpenClaw Agent Box - Minimal Image
+FROM node:22-slim
+
+LABEL maintainer="OpenClaw"
+
+# Basic deps only
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl git ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user (node image has uid 1000 as 'node')
+RUN useradd -m -s /bin/bash agent && \
+    mkdir -p /home/agent/.openclaw /workspace && \
+    chown -R agent:agent /home/agent /workspace
+
+# Install OpenClaw
+RUN npm install -g openclaw@latest
+
+# Ports
+EXPOSE 18789
+
+USER agent
+WORKDIR /workspace
+
+# Pre-create config structure
+RUN mkdir -p /home/agent/.openclaw/workspace \
+    /home/agent/.openclaw/credentials
+
+# Default command
+CMD ["openclaw", "gateway", "run"]

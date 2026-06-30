@@ -1,0 +1,15 @@
+#!/bin/bash
+# VNC session startup - minimal window manager with browser visible
+
+# Set up display
+export DISPLAY=:1
+xrdb $HOME/.Xresources 2>/dev/null || true
+
+# Start openbox window manager
+openbox &
+
+# Start a terminal for visibility
+xterm -geometry 120x30+10+10 -title "OpenClaw Agent" -e "tail -f /tmp/openclaw.log 2>/dev/null || echo 'Waiting for agent...' && sleep infinity" &
+
+# Keep session alive
+wait

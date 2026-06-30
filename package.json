@@ -1,0 +1,75 @@
+{
+  "name": "@openclaw/agentbox",
+  "version": "0.1.0",
+  "description": "OpenClaw Provider for AgentBox - Run AI agents with VNC screen sharing",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "claw-box": "dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./provider": {
+      "import": "./dist/provider.js",
+      "types": "./dist/provider.d.ts"
+    }
+  },
+  "files": [
+    "dist",
+    "docker"
+  ],
+  "scripts": {
+    "build": "tsup src/index.ts src/provider.ts src/cli.ts src/dashboard/server.ts --format esm --dts --clean",
+    "dev": "tsup src/index.ts src/provider.ts src/cli.ts src/dashboard/server.ts --format esm --dts --watch",
+    "docker:build": "docker build -f docker/Dockerfile.full -t openclaw/agentbox:full docker/",
+    "docker:build:minimal": "docker build -f docker/Dockerfile.minimal -t openclaw/agentbox:minimal docker/",
+    "test": "echo 'No tests yet'",
+    "prepublishOnly": "pnpm build"
+  },
+  "keywords": [
+    "openclaw",
+    "agentbox",
+    "ai-agents",
+    "vnc",
+    "docker",
+    "screen-sharing"
+  ],
+  "author": "Abhi",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/abhione/agentbox-openclaw.git"
+  },
+  "dependencies": {
+    "chalk": "^5.6.2",
+    "commander": "^15.0.0",
+    "dockerode": "^4.0.2",
+    "express": "^4.21.2",
+    "open": "^11.0.0",
+    "ws": "^8.18.0",
+    "yaml": "^2.9.0"
+  },
+  "devDependencies": {
+    "@types/dockerode": "^3.3.31",
+    "@types/express": "^4.17.21",
+    "@types/node": "^22.10.0",
+    "@types/ws": "^8.5.13",
+    "tsup": "^8.5.1",
+    "typescript": "^5.7.2"
+  },
+  "peerDependencies": {
+    "@madarco/agentbox": ">=0.21.0"
+  },
+  "peerDependenciesMeta": {
+    "@madarco/agentbox": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
