@@ -69,9 +69,8 @@ export function generateOpenClawConfig(input: ConfigInput): GeneratedConfig {
       },
       profiles: {
         chromium: {
-          driver: 'existing-session',
-          attachOnly: true,
           cdpUrl: 'http://127.0.0.1:18800',
+          attachOnly: true,
           color: '#4285F4',
         },
       },
