@@ -8,6 +8,7 @@
 import Docker from 'dockerode';
 import { EventEmitter } from 'events';
 import * as fs from 'fs';
+import * as fsPromises from 'fs/promises';
 import * as path from 'path';
 import * as os from 'os';
 
@@ -203,6 +204,10 @@ export class OpenClawProvider {
     
     req.onLog?.(`Creating OpenClaw box "${name}" with ports ${JSON.stringify(ports)}`);
 
+    // Ensure agent state directory exists for persistent storage
+    const agentStateDir = path.join(this.stateDir, 'agents', name);
+    await fsPromises.mkdir(agentStateDir, { recursive: true });
+
     // Build openclaw.json for the container
     const openclawConfig = this.buildOpenClawConfig(config, ports);
 
@@ -223,7 +228,11 @@ export class OpenClawProvider {
           '5901/tcp': [{ HostPort: String(ports.vnc) }],
           '6080/tcp': [{ HostPort: String(ports.novnc) }],
         },
-        Binds: req.workspacePath ? [`${req.workspacePath}:/workspace`] : [],
+        Binds: [
+          ...(req.workspacePath ? [`${req.workspacePath}:/workspace`] : []),
+          // Persist agent state (sessions, memory, config) across container restarts/recreates
+          `${this.stateDir}/agents/${name}:/home/agent/.openclaw`,
+        ],
         RestartPolicy: { Name: 'unless-stopped' },
       },
       Env: [
