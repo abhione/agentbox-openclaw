@@ -231,17 +231,19 @@ export default function Dashboard() {
       <header className="border-b border-zinc-800 px-6 py-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-blue-600 flex items-center justify-center">
+            <div className="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center">
               <span className="text-xl">🔭</span>
             </div>
             <div>
-              <h1 className="text-xl font-semibold">Agent Observatory</h1>
+              <h1 className="text-xl font-bold tracking-tight">
+                <span className="logo-text">Box Claws</span>
+              </h1>
               <p className="text-sm text-zinc-500">Zoom for AI Agents</p>
             </div>
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg font-medium transition-colors"
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg font-medium transition-colors"
           >
             + Deploy Agent
           </button>
@@ -263,7 +265,7 @@ export default function Dashboard() {
             ) : boxes.length === 0 ? (
               <div className="p-4 text-center text-zinc-500">
                 No agents deployed yet.
-                <button onClick={() => setShowCreateModal(true)} className="mt-2 text-blue-400 hover:underline block mx-auto">
+                <button onClick={() => setShowCreateModal(true)} className="mt-2 text-emerald-400 hover:underline block mx-auto">
                   Deploy your first agent
                 </button>
               </div>
@@ -273,7 +275,7 @@ export default function Dashboard() {
                   key={box.id}
                   onClick={() => setSelectedBox(box)}
                   className={`p-4 border-b border-zinc-800 cursor-pointer hover:bg-zinc-900 transition-colors ${
-                    selectedBox?.id === box.id ? 'bg-zinc-900 border-l-2 border-l-blue-500' : ''
+                    selectedBox?.id === box.id ? 'bg-zinc-900 border-l-2 border-l-emerald-500' : ''
                   }`}
                 >
                   <div className="flex items-center gap-3">
@@ -471,7 +473,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
           </div>
           <div className="flex gap-1">
             {[1, 2, 3, 4].map(s => (
-              <div key={s} className={`w-2 h-2 rounded-full ${step >= s ? 'bg-blue-500' : 'bg-zinc-700'}`} />
+              <div key={s} className={`w-2 h-2 rounded-full ${step >= s ? 'bg-emerald-500' : 'bg-zinc-700'}`} />
             ))}
           </div>
         </div>
@@ -495,7 +497,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                     }}
                     className={`p-4 rounded-lg border text-left transition-all ${
                       data.personaId === persona.id 
-                        ? 'border-blue-500 bg-blue-500/10' 
+                        ? 'border-emerald-500 bg-emerald-500/10' 
                         : 'border-zinc-700 hover:border-zinc-600 hover:bg-zinc-800'
                     }`}
                   >
@@ -515,7 +517,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 <button 
                   onClick={() => setStep(2)} 
                   disabled={!data.personaId}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
                 >
                   Next →
                 </button>
@@ -541,7 +543,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                   value={data.agentName}
                   onChange={(e) => updateData('agentName', e.target.value)}
                   placeholder="Give your agent a name"
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500 text-lg"
+                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-emerald-500 text-lg"
                 />
                 <div className="flex gap-2 mt-2">
                   {selectedPersona.suggestedNames.map(name => (
@@ -561,7 +563,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     onClick={() => updateData('infraProvider', 'docker')}
-                    className={`p-4 rounded-lg border text-left ${data.infraProvider === 'docker' ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 hover:border-zinc-600'}`}
+                    className={`p-4 rounded-lg border text-left ${data.infraProvider === 'docker' ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-700 hover:border-zinc-600'}`}
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-2xl">🐳</span>
@@ -571,7 +573,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                   </button>
                   <button
                     onClick={() => updateData('infraProvider', 'e2b')}
-                    className={`p-4 rounded-lg border text-left ${data.infraProvider === 'e2b' ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 hover:border-zinc-600'}`}
+                    className={`p-4 rounded-lg border text-left ${data.infraProvider === 'e2b' ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-700 hover:border-zinc-600'}`}
                   >
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-2xl">☁️</span>
@@ -614,7 +616,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 <button 
                   onClick={() => setStep(3)} 
                   disabled={!data.agentName}
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg"
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-lg"
                 >
                   Next →
                 </button>
@@ -640,7 +642,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                       key={p.id}
                       onClick={() => updateData('provider', p.id)}
                       className={`p-3 rounded-lg border text-left ${
-                        data.provider === p.id ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 hover:border-zinc-600'
+                        data.provider === p.id ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-700 hover:border-zinc-600'
                       }`}
                     >
                       <span className="text-xl mr-2">{p.icon}</span>
@@ -764,7 +766,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 <button onClick={() => setStep(2)} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg">
                   ← Back
                 </button>
-                <button onClick={() => setStep(4)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg">
+                <button onClick={() => setStep(4)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg">
                   Next →
                 </button>
               </div>
@@ -800,7 +802,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                   />
                   <p className="text-xs text-zinc-500 mt-1">
                     Comma-separated user IDs. Only these users can message the agent. 
-                    <a href="https://t.me/userinfobot" target="_blank" rel="noopener" className="text-blue-400 hover:underline ml-1">Get your ID</a>
+                    <a href="https://t.me/userinfobot" target="_blank" rel="noopener" className="text-emerald-400 hover:underline ml-1">Get your ID</a>
                   </p>
                 </div>
               )}
@@ -816,8 +818,8 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 </div>
               </div>
 
-              <div className="p-4 bg-blue-900/20 border border-blue-800 rounded-lg">
-                <h4 className="font-medium text-blue-400 mb-2">🚀 What happens next</h4>
+              <div className="p-4 bg-emerald-900/20 border border-blue-800 rounded-lg">
+                <h4 className="font-medium text-emerald-400 mb-2">🚀 What happens next</h4>
                 <ul className="text-sm text-zinc-300 space-y-1">
                   <li>• Docker container with OpenClaw + Chromium</li>
                   <li>• VNC for real-time screen viewing</li>
