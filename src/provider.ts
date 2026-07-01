@@ -69,6 +69,8 @@ export interface CreateBoxRequest {
   };
   /** Full OpenClaw config JSON to inject into container */
   openclawConfig?: Record<string, unknown>;
+  /** Workspace files to inject (SOUL.md, MEMORY.md, etc.) */
+  workspaceFiles?: { [path: string]: string };
   onLog?: (line: string) => void;
 }
 
@@ -259,7 +261,15 @@ export class OpenClawProvider {
     // Inject config - use provided openclawConfig if available, else build from options
     const configToInject = req.openclawConfig || openclawConfig;
     await this.injectConfig(container, configToInject);
-    req.onLog?.(`OpenClaw configured and starting...`);
+    req.onLog?.(`OpenClaw configured...`);
+
+    // Inject workspace files (SOUL.md, MEMORY.md, etc.)
+    if (req.workspaceFiles) {
+      await this.injectWorkspaceFiles(container, req.workspaceFiles);
+      req.onLog?.(`Workspace files created (SOUL.md, MEMORY.md, etc.)`);
+    }
+
+    req.onLog?.(`Agent starting...`);
 
     return { record, imageBuilt: false };
   }
@@ -288,11 +298,27 @@ export class OpenClawProvider {
 
   private async injectConfig(container: Docker.Container, config: object): Promise<void> {
     const configJson = JSON.stringify(config, null, 2);
+    // Use base64 to avoid shell escaping issues
+    const configB64 = Buffer.from(configJson).toString('base64');
     const exec = await container.exec({
-      Cmd: ['sh', '-c', `mkdir -p /home/agent/.openclaw && echo '${configJson.replace(/'/g, "\\'")}' > /home/agent/.openclaw/openclaw.json && chown -R agent:agent /home/agent/.openclaw`],
+      Cmd: ['sh', '-c', `mkdir -p /home/agent/.openclaw && echo '${configB64}' | base64 -d > /home/agent/.openclaw/openclaw.json && chown -R agent:agent /home/agent/.openclaw`],
       User: 'root',
     });
     await exec.start({ Detach: false });
+  }
+
+  private async injectWorkspaceFiles(container: Docker.Container, files: { [path: string]: string }): Promise<void> {
+    for (const [filePath, content] of Object.entries(files)) {
+      const fullPath = `/home/agent/workspace/${filePath}`;
+      const dirPath = fullPath.substring(0, fullPath.lastIndexOf('/'));
+      const contentB64 = Buffer.from(content).toString('base64');
+      
+      const exec = await container.exec({
+        Cmd: ['sh', '-c', `mkdir -p ${dirPath} && echo '${contentB64}' | base64 -d > ${fullPath} && chown agent:agent ${fullPath}`],
+        User: 'root',
+      });
+      await exec.start({ Detach: false });
+    }
   }
 
   async start(box: BoxRecord): Promise<BoxRecord> {

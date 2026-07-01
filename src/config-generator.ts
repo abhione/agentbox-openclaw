@@ -1,0 +1,189 @@
+/**
+ * OpenClaw Config Generator
+ * 
+ * Generates valid openclaw.json configs that actually work
+ */
+
+import { getPersonaById, generateAgentFiles, type AgentPersona } from './personas.js';
+
+export interface ConfigInput {
+  agentName: string;
+  model: string;
+  provider: 'anthropic' | 'openai' | 'bedrock' | 'ollama';
+  credentials: {
+    anthropicKey?: string;
+    openaiKey?: string;
+    bedrockAccessKey?: string;
+    bedrockSecretKey?: string;
+    bedrockRegion?: string;
+    ollamaHost?: string;
+  };
+  telegramToken?: string;
+  personaId?: string;
+}
+
+export function generateOpenClawConfig(input: ConfigInput): Record<string, unknown> {
+  const config: Record<string, unknown> = {
+    meta: {
+      lastTouchedVersion: '2026.6.5',
+      lastTouchedAt: new Date().toISOString(),
+    },
+    wizard: {
+      lastRunAt: new Date().toISOString(),
+      lastRunVersion: '2026.6.5',
+      lastRunCommand: 'agentbox-deploy',
+      lastRunMode: 'local',
+    },
+    gateway: {
+      mode: 'local',
+      port: 18789,
+      bind: 'lan',
+    },
+    agents: {
+      defaults: {
+        model: {
+          primary: input.model,
+          fallbacks: [],
+        },
+        workspace: '/home/agent/workspace',
+        memorySearch: {
+          sources: ['memory'],
+          provider: 'disabled',
+        },
+      },
+    },
+    browser: {
+      enabled: true,
+      defaultProfile: 'chromium',
+      profiles: {
+        chromium: {
+          driver: 'openclaw',
+          cdpUrl: 'http://127.0.0.1:18800',
+        },
+      },
+    },
+    tools: {
+      exec: {
+        security: 'permissive',
+        host: 'gateway',
+      },
+      browser: {
+        enabled: true,
+      },
+      web: {
+        search: {},
+      },
+    },
+    auth: {
+      profiles: {},
+    },
+    channels: {},
+    approvals: {},
+    cron: {},
+    models: {},
+    plugins: {},
+    session: {},
+    skills: {},
+    mcp: {},
+    commands: {},
+    messages: {},
+    env: {},
+  };
+
+  // Add auth profile based on provider
+  const authProfiles = (config.auth as { profiles: Record<string, unknown> }).profiles;
+  
+  if (input.provider === 'anthropic' && input.credentials.anthropicKey) {
+    authProfiles['anthropic:default'] = {
+      provider: 'anthropic',
+      mode: 'token',
+      token: input.credentials.anthropicKey,
+    };
+  } else if (input.provider === 'openai' && input.credentials.openaiKey) {
+    authProfiles['openai:default'] = {
+      provider: 'openai',
+      mode: 'token',
+      token: input.credentials.openaiKey,
+    };
+  } else if (input.provider === 'bedrock' && input.credentials.bedrockAccessKey) {
+    authProfiles['bedrock:default'] = {
+      provider: 'bedrock',
+      mode: 'iam',
+      accessKeyId: input.credentials.bedrockAccessKey,
+      secretAccessKey: input.credentials.bedrockSecretKey,
+      region: input.credentials.bedrockRegion || 'us-east-1',
+    };
+  } else if (input.provider === 'ollama') {
+    authProfiles['ollama:default'] = {
+      provider: 'ollama',
+      host: input.credentials.ollamaHost || 'http://host.docker.internal:11434',
+    };
+  }
+
+  // Add Telegram channel if configured
+  if (input.telegramToken) {
+    (config.channels as Record<string, unknown>).telegram = {
+      enabled: true,
+      botToken: input.telegramToken,
+      dmPolicy: 'open',
+      streaming: {
+        mode: 'partial',
+      },
+    };
+  }
+
+  return config;
+}
+
+export function generateWorkspaceFiles(input: ConfigInput): { [path: string]: string } {
+  const persona = input.personaId ? getPersonaById(input.personaId) : null;
+  
+  if (persona) {
+    return generateAgentFiles(persona, input.agentName);
+  }
+
+  // Default files for custom agents
+  return {
+    'SOUL.md': `# SOUL.md - Who You Are
+
+*Your name is ${input.agentName}.*
+
+Be helpful, honest, and thorough. Ask clarifying questions when needed.
+
+---
+
+*This file defines who you are. Update it as you learn and grow.*
+`,
+    'AGENTS.md': `# AGENTS.md - Your Workspace
+
+## Identity
+- **Name:** ${input.agentName}
+
+## Every Session
+1. Read \`SOUL.md\` — this is who you are
+2. Check recent messages for context
+
+## Safety
+- Don't exfiltrate private data
+- Ask before sending external communications
+- When in doubt, ask
+`,
+    'MEMORY.md': `# MEMORY.md - Long-Term Memory
+
+## About Me
+- **Name:** ${input.agentName}
+- **Created:** ${new Date().toISOString().split('T')[0]}
+
+## Key Learnings
+*(Add important learnings here as you work)*
+`,
+    'memory/NOW.md': `# NOW.md - Current Context
+
+## Status
+Just deployed! Ready to start working.
+
+## Current Focus
+Waiting for first task.
+`,
+  };
+}
