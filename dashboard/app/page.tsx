@@ -1,30 +1,28 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { toast, Toaster } from 'sonner';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { 
+  Plus, Play, Square, Trash2, Monitor, Settings, Loader2, 
+  Bot, Zap, Users, Pencil, Search, FileText, Cog, Target, Handshake
+} from 'lucide-react';
 
 interface AgentBox {
   id: string;
   name: string;
-  state: 'running' | 'stopped' | 'paused' | 'missing';
+  state: 'running' | 'stopped' | 'paused' | 'missing' | 'deploying';
   containerId?: string;
   createdAt: string;
-  ports?: {
-    gateway: number;
-    vnc: number;
-    novnc: number;
-    browserControl: number;
-  };
-  config?: {
-    name: string;
-    model?: string;
-    persona?: string;
-  };
-}
-
-interface Activity {
-  type: string;
-  data: unknown;
-  timestamp: string;
+  ports?: { gateway: number; vnc: number; novnc: number; browserControl: number };
+  config?: { name: string; model?: string; persona?: string };
+  deployProgress?: string;
 }
 
 type LLMProvider = 'anthropic' | 'openai' | 'bedrock' | 'ollama';
@@ -33,147 +31,41 @@ type InfraProvider = 'docker' | 'e2b';
 interface AgentPersona {
   id: string;
   name: string;
-  emoji: string;
+  icon: React.ReactNode;
   tagline: string;
   description: string;
   defaultModel: string;
-  personality: { tone: string; style: string; traits: string[] };
-  capabilities: string[];
   suggestedNames: string[];
 }
 
 const PERSONAS: AgentPersona[] = [
-  {
-    id: 'executive-assistant',
-    name: 'Executive Assistant',
-    emoji: '👔',
-    tagline: 'Your tireless chief of staff',
-    description: 'Manages calendars, drafts communications, researches topics, and handles administrative tasks.',
-    defaultModel: 'anthropic/claude-sonnet-4-6',
-    personality: { tone: 'Professional, warm, efficient', style: 'Concise but thorough', traits: ['Organized', 'Proactive', 'Discreet'] },
-    capabilities: ['Calendar management', 'Email drafting', 'Research', 'Travel planning'],
-    suggestedNames: ['Alexandra', 'Marcus', 'Victoria', 'James']
-  },
-  {
-    id: 'sales-dev-rep',
-    name: 'Sales Development Rep',
-    emoji: '🎯',
-    tagline: 'Outbound machine that books meetings',
-    description: 'Researches prospects, crafts personalized outreach, and books qualified meetings.',
-    defaultModel: 'anthropic/claude-sonnet-4-6',
-    personality: { tone: 'Confident, friendly', style: 'Conversational, value-focused', traits: ['Persistent', 'Empathetic', 'Results-oriented'] },
-    capabilities: ['Prospect research', 'Personalized outreach', 'Objection handling', 'Meeting scheduling'],
-    suggestedNames: ['Jordan', 'Taylor', 'Morgan', 'Casey']
-  },
-  {
-    id: 'customer-success',
-    name: 'Customer Success Manager',
-    emoji: '🤝',
-    tagline: 'Keeps customers happy and growing',
-    description: 'Onboards customers, monitors health, identifies expansion, and prevents churn.',
-    defaultModel: 'anthropic/claude-sonnet-4-6',
-    personality: { tone: 'Warm, supportive', style: 'Patient and thorough', traits: ['Empathetic', 'Strategic', 'Celebratory'] },
-    capabilities: ['Customer onboarding', 'Health monitoring', 'QBR preparation', 'Churn prevention'],
-    suggestedNames: ['Olivia', 'Ethan', 'Sophia', 'Noah']
-  },
-  {
-    id: 'content-creator',
-    name: 'Content Creator',
-    emoji: '✍️',
-    tagline: 'Writes content that converts',
-    description: 'Creates blog posts, social content, email campaigns, and marketing copy.',
-    defaultModel: 'anthropic/claude-sonnet-4-6',
-    personality: { tone: 'Engaging, authentic', style: 'Clear and compelling', traits: ['Creative', 'Strategic', 'Versatile'] },
-    capabilities: ['Blog writing', 'Social media', 'Email campaigns', 'Ad copy'],
-    suggestedNames: ['Quinn', 'Avery', 'Riley', 'Blake']
-  },
-  {
-    id: 'research-analyst',
-    name: 'Research Analyst',
-    emoji: '🔬',
-    tagline: 'Deep dives that drive decisions',
-    description: 'Conducts market research, competitive analysis, and data synthesis.',
-    defaultModel: 'anthropic/claude-opus-4-6',
-    personality: { tone: 'Analytical, thorough', style: 'Structured with clear takeaways', traits: ['Curious', 'Rigorous', 'Objective'] },
-    capabilities: ['Market research', 'Competitive analysis', 'Trend identification', 'Report writing'],
-    suggestedNames: ['Morgan', 'Parker', 'Reese', 'Sage']
-  },
-  {
-    id: 'technical-writer',
-    name: 'Technical Writer',
-    emoji: '📚',
-    tagline: 'Documentation developers love',
-    description: 'Creates API docs, user guides, tutorials, and technical content.',
-    defaultModel: 'anthropic/claude-sonnet-4-6',
-    personality: { tone: 'Clear, precise', style: 'Structured, example-rich', traits: ['Precise', 'Empathetic', 'Systematic'] },
-    capabilities: ['API documentation', 'User guides', 'Tutorials', 'Code examples'],
-    suggestedNames: ['Alex', 'Sam', 'Jamie', 'Drew']
-  },
-  {
-    id: 'recruiter',
-    name: 'Recruiter',
-    emoji: '🔍',
-    tagline: 'Finds and attracts top talent',
-    description: 'Sources candidates, crafts outreach, screens applicants, coordinates hiring.',
-    defaultModel: 'anthropic/claude-sonnet-4-6',
-    personality: { tone: 'Enthusiastic, genuine', style: 'Personal, never spammy', traits: ['Persistent', 'Perceptive', 'Organized'] },
-    capabilities: ['Candidate sourcing', 'Outreach campaigns', 'Resume screening', 'Interview coordination'],
-    suggestedNames: ['Meg', 'Spencer', 'Robin', 'Cameron']
-  },
-  {
-    id: 'ops-automator',
-    name: 'Operations Automator',
-    emoji: '⚙️',
-    tagline: 'Automates the boring stuff',
-    description: 'Identifies repetitive tasks, builds automations, optimizes workflows.',
-    defaultModel: 'anthropic/claude-sonnet-4-6',
-    personality: { tone: 'Practical, efficient', style: 'Direct, documents everything', traits: ['Systematic', 'Reliable', 'Efficiency-obsessed'] },
-    capabilities: ['Workflow automation', 'Integration management', 'Process documentation', 'Report generation'],
-    suggestedNames: ['Dana', 'Ellis', 'Phoenix', 'Rowan']
-  }
+  { id: 'executive-assistant', name: 'Executive Assistant', icon: <Bot className="w-5 h-5" />, tagline: 'Your tireless chief of staff', description: 'Manages calendars, drafts communications, researches topics.', defaultModel: 'anthropic/claude-sonnet-4-6', suggestedNames: ['Alexandra', 'Marcus', 'Victoria'] },
+  { id: 'sales-dev-rep', name: 'Sales Dev Rep', icon: <Target className="w-5 h-5" />, tagline: 'Outbound machine that books meetings', description: 'Researches prospects, crafts personalized outreach.', defaultModel: 'anthropic/claude-sonnet-4-6', suggestedNames: ['Jordan', 'Taylor', 'Morgan'] },
+  { id: 'customer-success', name: 'Customer Success', icon: <Handshake className="w-5 h-5" />, tagline: 'Keeps customers happy', description: 'Onboards customers, monitors health, prevents churn.', defaultModel: 'anthropic/claude-sonnet-4-6', suggestedNames: ['Olivia', 'Ethan', 'Sophia'] },
+  { id: 'content-creator', name: 'Content Creator', icon: <Pencil className="w-5 h-5" />, tagline: 'Writes content that converts', description: 'Creates blog posts, social content, email campaigns.', defaultModel: 'anthropic/claude-sonnet-4-6', suggestedNames: ['Quinn', 'Avery', 'Riley'] },
+  { id: 'research-analyst', name: 'Research Analyst', icon: <Search className="w-5 h-5" />, tagline: 'Deep dives that drive decisions', description: 'Conducts market research and competitive analysis.', defaultModel: 'anthropic/claude-opus-4-6', suggestedNames: ['Morgan', 'Parker', 'Reese'] },
+  { id: 'technical-writer', name: 'Technical Writer', icon: <FileText className="w-5 h-5" />, tagline: 'Documentation developers love', description: 'Creates API docs, user guides, tutorials.', defaultModel: 'anthropic/claude-sonnet-4-6', suggestedNames: ['Alex', 'Sam', 'Jamie'] },
+  { id: 'recruiter', name: 'Recruiter', icon: <Users className="w-5 h-5" />, tagline: 'Finds and attracts top talent', description: 'Sources candidates, crafts outreach, screens applicants.', defaultModel: 'anthropic/claude-sonnet-4-6', suggestedNames: ['Meg', 'Spencer', 'Robin'] },
+  { id: 'ops-automator', name: 'Ops Automator', icon: <Cog className="w-5 h-5" />, tagline: 'Automates the boring stuff', description: 'Builds automations, optimizes workflows.', defaultModel: 'anthropic/claude-sonnet-4-6', suggestedNames: ['Dana', 'Ellis', 'Phoenix'] },
 ];
-
-interface OnboardingData {
-  // Step 1: Persona
-  personaId: string;
-  // Step 2: Identity + Infrastructure
-  agentName: string;
-  infraProvider: InfraProvider;
-  // Step 3: LLM Provider & Credentials
-  provider: LLMProvider;
-  anthropicKey?: string;
-  openaiKey?: string;
-  bedrockAccessKey?: string;
-  bedrockSecretKey?: string;
-  bedrockRegion?: string;
-  ollamaHost?: string;
-  model: string;
-  // Step 4: Channels
-  telegramToken?: string;
-  telegramUserIds?: string;
-}
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3457';
 
 export default function Dashboard() {
   const [boxes, setBoxes] = useState<AgentBox[]>([]);
   const [selectedBox, setSelectedBox] = useState<AgentBox | null>(null);
-  const [activities, setActivities] = useState<Activity[]>([]);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [deployingBoxes, setDeployingBoxes] = useState<Map<string, { progress: string; persona?: string }>>(new Map());
   const wsRef = useRef<WebSocket | null>(null);
-  const activityEndRef = useRef<HTMLDivElement>(null);
 
   const fetchBoxes = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/boxes`);
-      if (!res.ok) throw new Error('Failed to fetch boxes');
-      const data = await res.json();
-      setBoxes(data);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to connect');
+      if (!res.ok) throw new Error('Failed to fetch');
+      setBoxes(await res.json());
+    } catch {
+      // Silent fail on fetch
     } finally {
       setLoading(false);
     }
@@ -182,25 +74,13 @@ export default function Dashboard() {
   useEffect(() => {
     const ws = new WebSocket(`ws://localhost:3457`);
     wsRef.current = ws;
-
-    ws.onmessage = (event) => {
-      const msg = JSON.parse(event.data);
+    ws.onmessage = (e) => {
+      const msg = JSON.parse(e.data);
       if (msg.type === 'init') setBoxes(msg.boxes);
       else if (msg.type?.startsWith('box:')) fetchBoxes();
-      else if (msg.messageType === 'activity' && msg.boxId === selectedBox?.id) {
-        setActivities(prev => [...prev.slice(-99), { type: msg.type, data: msg.data, timestamp: msg.timestamp }]);
-      }
     };
-
     return () => ws.close();
-  }, [fetchBoxes, selectedBox?.id]);
-
-  useEffect(() => {
-    if (selectedBox && wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({ type: 'subscribe', boxId: selectedBox.id }));
-      setActivities([]);
-    }
-  }, [selectedBox]);
+  }, [fetchBoxes]);
 
   useEffect(() => {
     fetchBoxes();
@@ -208,656 +88,441 @@ export default function Dashboard() {
     return () => clearInterval(interval);
   }, [fetchBoxes]);
 
-  useEffect(() => {
-    activityEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [activities]);
-
   const handleAction = async (boxId: string, action: 'start' | 'stop' | 'destroy') => {
     try {
       const method = action === 'destroy' ? 'DELETE' : 'POST';
-      const url = action === 'destroy' 
-        ? `${API_BASE}/api/boxes/${boxId}`
-        : `${API_BASE}/api/boxes/${boxId}/${action}`;
+      const url = action === 'destroy' ? `${API_BASE}/api/boxes/${boxId}` : `${API_BASE}/api/boxes/${boxId}/${action}`;
       await fetch(url, { method });
+      toast.success(`Agent ${action === 'destroy' ? 'destroyed' : action === 'start' ? 'started' : 'stopped'}`);
       fetchBoxes();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : `Failed to ${action}`);
+    } catch {
+      toast.error(`Failed to ${action} agent`);
     }
   };
 
+  const allAgents = [
+    ...Array.from(deployingBoxes.entries()).map(([name, { progress, persona }]) => ({
+      id: `deploying-${name}`,
+      name,
+      state: 'deploying' as const,
+      deployProgress: progress,
+      config: { name, persona },
+    })),
+    ...boxes,
+  ];
+
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="min-h-screen flex flex-col bg-background">
+      <Toaster position="bottom-right" richColors />
+      
       {/* Header */}
-      <header className="border-b border-zinc-800 px-6 py-4">
-        <div className="flex items-center justify-between">
+      <header className="border-b border-border px-6 py-4">
+        <div className="flex items-center justify-between max-w-screen-2xl mx-auto">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-lg bg-emerald-600 flex items-center justify-center">
-              <span className="text-xl">🔭</span>
+            <div className="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary">
+              <Zap className="w-5 h-5" />
             </div>
             <div>
               <h1 className="text-xl font-bold tracking-tight">
                 <span className="logo-text">Box Claws</span>
               </h1>
-              <p className="text-sm text-zinc-500">Zoom for AI Agents</p>
+              <p className="text-sm text-muted-foreground">AI Agent Observatory</p>
             </div>
           </div>
-          <button
-            onClick={() => setShowCreateModal(true)}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg font-medium transition-colors"
-          >
-            + Deploy Agent
-          </button>
+          <Button onClick={() => setShowCreateModal(true)}>
+            <Plus className="w-4 h-4" />
+            Deploy Agent
+          </Button>
         </div>
       </header>
 
       <div className="flex-1 flex">
         {/* Sidebar */}
-        <aside className="w-80 border-r border-zinc-800 flex flex-col">
-          <div className="p-4 border-b border-zinc-800">
-            <h2 className="font-medium text-zinc-400">Agents ({boxes.length})</h2>
+        <aside className="w-80 border-r border-border flex flex-col">
+          <div className="p-4 border-b border-border">
+            <div className="flex items-center justify-between">
+              <h2 className="font-medium text-muted-foreground">Agents</h2>
+              <Badge variant="secondary">{allAgents.length}</Badge>
+            </div>
           </div>
           
           <div className="flex-1 overflow-y-auto">
             {loading ? (
-              <div className="p-4 text-center text-zinc-500">Loading...</div>
-            ) : error ? (
-              <div className="p-4 text-center text-red-400">{error}</div>
-            ) : boxes.length === 0 ? (
-              <div className="p-4 text-center text-zinc-500">
-                No agents deployed yet.
-                <button onClick={() => setShowCreateModal(true)} className="mt-2 text-emerald-400 hover:underline block mx-auto">
+              <div className="p-8 flex justify-center">
+                <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+              </div>
+            ) : allAgents.length === 0 ? (
+              <div className="p-6 text-center">
+                <div className="w-12 h-12 rounded-full bg-muted flex items-center justify-center mx-auto mb-3">
+                  <Bot className="w-6 h-6 text-muted-foreground" />
+                </div>
+                <p className="text-muted-foreground mb-3">No agents deployed yet</p>
+                <Button variant="outline" size="sm" onClick={() => setShowCreateModal(true)}>
                   Deploy your first agent
-                </button>
+                </Button>
               </div>
             ) : (
-              boxes.map((box) => (
-                <div
-                  key={box.id}
-                  onClick={() => setSelectedBox(box)}
-                  className={`p-4 border-b border-zinc-800 cursor-pointer hover:bg-zinc-900 transition-colors ${
-                    selectedBox?.id === box.id ? 'bg-zinc-900 border-l-2 border-l-emerald-500' : ''
-                  }`}
-                >
-                  <div className="flex items-center gap-3">
-                    <StatusIndicator state={box.state} />
-                    <div>
-                      <h3 className="font-medium">{box.name}</h3>
-                      <p className="text-sm text-zinc-500">{box.config?.persona || 'Custom'}</p>
+              <div className="p-2 space-y-1">
+                {allAgents.map((box) => (
+                  <button
+                    key={box.id}
+                    onClick={() => box.state !== 'deploying' && setSelectedBox(box as AgentBox)}
+                    disabled={box.state === 'deploying'}
+                    className={`w-full p-3 rounded-lg text-left transition-all ${
+                      selectedBox?.id === box.id 
+                        ? 'bg-primary/10 border border-primary/20' 
+                        : 'hover:bg-muted/50 border border-transparent'
+                    } ${box.state === 'deploying' ? 'opacity-80' : ''}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <StatusDot state={box.state} />
+                      <div className="flex-1 min-w-0">
+                        <h3 className="font-medium truncate">{box.name}</h3>
+                        <p className="text-xs text-muted-foreground truncate">
+                          {box.state === 'deploying' ? box.deployProgress : box.config?.persona || 'Custom'}
+                        </p>
+                      </div>
+                      {box.state === 'deploying' && (
+                        <Loader2 className="w-4 h-4 animate-spin text-primary" />
+                      )}
                     </div>
-                  </div>
-                  <div className="mt-2 flex gap-2 text-xs text-zinc-500">
-                    <span>:{box.ports?.gateway}</span>
-                    <span>•</span>
-                    <span>VNC :{box.ports?.novnc}</span>
-                  </div>
-                </div>
-              ))
+                  </button>
+                ))}
+              </div>
             )}
           </div>
         </aside>
 
-        {/* Main */}
+        {/* Main Content */}
         <main className="flex-1 flex flex-col">
           {selectedBox ? (
             <>
-              <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
-                <div>
-                  <h2 className="text-lg font-semibold">{selectedBox.name}</h2>
-                  <p className="text-sm text-zinc-500">Container: {selectedBox.containerId?.slice(0, 12)}</p>
+              {/* Agent Header */}
+              <div className="p-4 border-b border-border flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <StatusDot state={selectedBox.state} size="lg" />
+                  <div>
+                    <h2 className="text-lg font-semibold">{selectedBox.name}</h2>
+                    <p className="text-sm text-muted-foreground">
+                      {selectedBox.config?.persona || 'Custom'} • Port {selectedBox.ports?.gateway}
+                    </p>
+                  </div>
                 </div>
                 <div className="flex gap-2">
                   {selectedBox.state === 'running' && (
                     <>
-                      <a
-                        href={`http://localhost:${selectedBox.ports?.novnc}/vnc.html?autoconnect=true`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded text-sm"
-                      >
-                        🖥️ Open VNC
-                      </a>
-                      <button onClick={() => handleAction(selectedBox.id, 'stop')} className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 rounded text-sm">
+                      <Button variant="outline" size="sm" asChild>
+                        <a href={`http://localhost:${selectedBox.ports?.novnc}/vnc.html?autoconnect=true`} target="_blank">
+                          <Monitor className="w-4 h-4" />
+                          Open VNC
+                        </a>
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => handleAction(selectedBox.id, 'stop')}>
+                        <Square className="w-4 h-4" />
                         Stop
-                      </button>
+                      </Button>
                     </>
                   )}
                   {selectedBox.state === 'stopped' && (
-                    <button onClick={() => handleAction(selectedBox.id, 'start')} className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm">
+                    <Button variant="outline" size="sm" onClick={() => handleAction(selectedBox.id, 'start')}>
+                      <Play className="w-4 h-4" />
                       Start
-                    </button>
+                    </Button>
                   )}
-                  <button onClick={() => handleAction(selectedBox.id, 'destroy')} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm">
-                    Destroy
-                  </button>
+                  <Button variant="destructive" size="sm" onClick={() => handleAction(selectedBox.id, 'destroy')}>
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
                 </div>
               </div>
 
-              <div className="flex-1 flex">
-                <div className="flex-1 p-4">
-                  <div className="h-full bg-black rounded-lg overflow-hidden">
-                    {selectedBox.state === 'running' ? (
-                      <iframe
-                        src={`http://localhost:${selectedBox.ports?.novnc}/vnc.html?autoconnect=true&resize=scale`}
-                        className="w-full h-full border-0"
-                        title={`VNC: ${selectedBox.name}`}
-                      />
-                    ) : (
-                      <div className="h-full flex items-center justify-center text-zinc-500">
-                        <div className="text-center">
-                          <div className="text-4xl mb-2">📴</div>
-                          <p>Agent is {selectedBox.state}</p>
-                          <button onClick={() => handleAction(selectedBox.id, 'start')} className="mt-4 px-4 py-2 bg-green-600 rounded">
+              {/* VNC View */}
+              <div className="flex-1 p-4">
+                <div className="h-full bg-black rounded-lg overflow-hidden border border-border">
+                  {selectedBox.state === 'running' ? (
+                    <iframe
+                      src={`http://localhost:${selectedBox.ports?.novnc}/vnc.html?autoconnect=true&resize=scale`}
+                      className="w-full h-full border-0"
+                      title={`VNC: ${selectedBox.name}`}
+                    />
+                  ) : (
+                    <div className="h-full flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="w-16 h-16 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+                          <Monitor className="w-8 h-8 text-muted-foreground" />
+                        </div>
+                        <p className="text-muted-foreground mb-4">Agent is {selectedBox.state}</p>
+                        {selectedBox.state === 'stopped' && (
+                          <Button onClick={() => handleAction(selectedBox.id, 'start')}>
+                            <Play className="w-4 h-4" />
                             Start Agent
-                          </button>
-                        </div>
+                          </Button>
+                        )}
                       </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="w-80 border-l border-zinc-800 flex flex-col">
-                  <div className="p-3 border-b border-zinc-800">
-                    <h3 className="font-medium text-sm text-zinc-400">Activity Feed</h3>
-                  </div>
-                  <div className="flex-1 overflow-y-auto p-3 space-y-2">
-                    {activities.length === 0 ? (
-                      <p className="text-sm text-zinc-500 text-center py-4">No activity yet</p>
-                    ) : (
-                      activities.map((activity, i) => (
-                        <div key={i} className="text-sm p-2 bg-zinc-900 rounded">
-                          <div className="flex justify-between text-zinc-500 text-xs mb-1">
-                            <span className="font-mono">{activity.type}</span>
-                            <span>{new Date(activity.timestamp).toLocaleTimeString()}</span>
-                          </div>
-                          <pre className="text-zinc-300 whitespace-pre-wrap break-words text-xs">
-                            {typeof activity.data === 'string' ? activity.data : JSON.stringify(activity.data, null, 2)}
-                          </pre>
-                        </div>
-                      ))
-                    )}
-                    <div ref={activityEndRef} />
-                  </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </>
           ) : (
-            <div className="flex-1 flex items-center justify-center text-zinc-500">
+            <div className="flex-1 flex items-center justify-center">
               <div className="text-center">
-                <div className="text-6xl mb-4">🔭</div>
+                <div className="w-20 h-20 rounded-full bg-muted flex items-center justify-center mx-auto mb-4">
+                  <Zap className="w-10 h-10 text-muted-foreground" />
+                </div>
                 <h2 className="text-xl font-medium mb-2">Select an agent</h2>
-                <p>Choose an agent from the sidebar to view its screen</p>
+                <p className="text-muted-foreground">Choose an agent from the sidebar to view its screen</p>
               </div>
             </div>
           )}
         </main>
       </div>
 
-      {showCreateModal && (
-        <CreateAgentModal onClose={() => setShowCreateModal(false)} onCreated={() => { setShowCreateModal(false); fetchBoxes(); }} />
-      )}
+      {/* Create Modal */}
+      <CreateAgentDialog 
+        open={showCreateModal} 
+        onOpenChange={setShowCreateModal}
+        onDeployStart={(name, persona) => {
+          setShowCreateModal(false);
+          setDeployingBoxes(prev => new Map(prev).set(name, { progress: 'Creating...', persona }));
+        }}
+        onDeployProgress={(name, progress) => {
+          setDeployingBoxes(prev => {
+            const updated = new Map(prev);
+            const existing = updated.get(name);
+            if (existing) updated.set(name, { ...existing, progress });
+            return updated;
+          });
+        }}
+        onDeployComplete={(name) => {
+          setDeployingBoxes(prev => { const u = new Map(prev); u.delete(name); return u; });
+          toast.success(`${name} deployed successfully!`);
+          fetchBoxes();
+        }}
+        onDeployError={(name, error) => {
+          setDeployingBoxes(prev => { const u = new Map(prev); u.delete(name); return u; });
+          toast.error(`Failed to deploy ${name}: ${error}`);
+        }}
+      />
     </div>
   );
 }
 
-function StatusIndicator({ state }: { state: AgentBox['state'] }) {
-  const colors = { running: 'bg-green-500', stopped: 'bg-zinc-500', paused: 'bg-yellow-500', missing: 'bg-red-500' };
-  return <div className={`w-3 h-3 rounded-full ${colors[state]} ${state === 'running' ? 'animate-pulse' : ''}`} title={state} />;
+function StatusDot({ state, size = 'sm' }: { state: string; size?: 'sm' | 'lg' }) {
+  const sizeClass = size === 'lg' ? 'w-3 h-3' : 'w-2 h-2';
+  const colors: Record<string, string> = {
+    running: 'bg-emerald-500 animate-pulse-ring',
+    stopped: 'bg-zinc-500',
+    paused: 'bg-yellow-500',
+    missing: 'bg-red-500',
+    deploying: 'bg-yellow-500 animate-pulse',
+  };
+  return <div className={`${sizeClass} rounded-full ${colors[state] || 'bg-zinc-500'}`} />;
 }
 
-function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+interface CreateAgentDialogProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  onDeployStart: (name: string, persona?: string) => void;
+  onDeployProgress: (name: string, progress: string) => void;
+  onDeployComplete: (name: string) => void;
+  onDeployError: (name: string, error: string) => void;
+}
+
+function CreateAgentDialog({ open, onOpenChange, onDeployStart, onDeployProgress, onDeployComplete, onDeployError }: CreateAgentDialogProps) {
   const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [data, setData] = useState<OnboardingData>({
+  const [data, setData] = useState({
     personaId: '',
     agentName: '',
-    infraProvider: 'docker',
-    provider: 'anthropic',
+    infraProvider: 'docker' as InfraProvider,
+    provider: 'anthropic' as LLMProvider,
+    anthropicKey: '',
     model: 'anthropic/claude-sonnet-4-6',
+    telegramToken: '',
+    telegramUserIds: '',
   });
 
   const selectedPersona = PERSONAS.find(p => p.id === data.personaId);
 
-  const updateData = (field: keyof OnboardingData, value: string) => {
-    setData(prev => {
-      const updated = { ...prev, [field]: value };
-      // Update model when provider changes
-      if (field === 'provider') {
-        const models: Record<LLMProvider, string> = {
-          anthropic: 'anthropic/claude-sonnet-4-6',
-          openai: 'openai/gpt-4o',
-          bedrock: 'bedrock/anthropic.claude-sonnet-4-6-v1',
-          ollama: 'ollama/llama3.3'
-        };
-        updated.model = models[value as LLMProvider];
-      }
-      return updated;
-    });
-  };
-
   const handleSubmit = async () => {
-    setLoading(true);
-    setError(null);
+    const boxName = data.agentName.toLowerCase().replace(/[^a-z0-9-]/g, '-');
+    onDeployStart(boxName, selectedPersona?.name);
 
     try {
-      const res = await fetch(`${API_BASE}/api/boxes`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          name: data.agentName.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
-          provider: data.infraProvider,
-          persona: data.personaId,
-          model: data.model,
-          anthropicApiKey: data.anthropicKey,
-          telegramToken: data.telegramToken,
-          telegramUserId: data.telegramUserIds?.split(',')[0]?.trim(),
-        }),
-      });
-
-      if (!res.ok) throw new Error((await res.json()).error || 'Failed to create');
-      onCreated();
+      if (data.infraProvider === 'e2b') {
+        const params = new URLSearchParams({
+          name: boxName, provider: data.infraProvider, persona: data.personaId,
+          model: data.model, anthropicApiKey: data.anthropicKey,
+          telegramToken: data.telegramToken, telegramUserId: data.telegramUserIds?.split(',')[0]?.trim() || '',
+        });
+        const eventSource = new EventSource(`${API_BASE}/api/boxes/deploy-stream?${params}`);
+        eventSource.onmessage = (e) => {
+          const progress = JSON.parse(e.data);
+          if (progress.error) { onDeployError(boxName, progress.error); eventSource.close(); }
+          else if (progress.done) { onDeployComplete(boxName); eventSource.close(); }
+          else onDeployProgress(boxName, progress.message);
+        };
+        eventSource.onerror = () => { onDeployError(boxName, 'Connection lost'); eventSource.close(); };
+      } else {
+        onDeployProgress(boxName, 'Starting container...');
+        const res = await fetch(`${API_BASE}/api/boxes`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: boxName, provider: data.infraProvider, persona: data.personaId,
+            model: data.model, anthropicApiKey: data.anthropicKey,
+            telegramToken: data.telegramToken, telegramUserId: data.telegramUserIds?.split(',')[0]?.trim(),
+          }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || 'Failed');
+        onDeployComplete(boxName);
+      }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create');
-    } finally {
-      setLoading(false);
+      onDeployError(boxName, err instanceof Error ? err.message : 'Failed');
     }
   };
 
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-      <div className="bg-zinc-900 rounded-xl w-full max-w-2xl border border-zinc-800 max-h-[90vh] overflow-y-auto">
-        <div className="sticky top-0 bg-zinc-900 border-b border-zinc-800 px-6 py-4 flex items-center justify-between">
-          <div>
-            <h2 className="text-xl font-semibold">Deploy New Agent</h2>
-            <p className="text-sm text-zinc-500">Step {step} of 4</p>
-          </div>
-          <div className="flex gap-1">
-            {[1, 2, 3, 4].map(s => (
-              <div key={s} className={`w-2 h-2 rounded-full ${step >= s ? 'bg-emerald-500' : 'bg-zinc-700'}`} />
-            ))}
-          </div>
-        </div>
+  // Reset on close
+  useEffect(() => {
+    if (!open) {
+      setStep(1);
+      setData({ personaId: '', agentName: '', infraProvider: 'docker', provider: 'anthropic', anthropicKey: '', model: 'anthropic/claude-sonnet-4-6', telegramToken: '', telegramUserIds: '' });
+    }
+  }, [open]);
 
-        <div className="p-6">
-          {/* Step 1: Choose Persona */}
-          {step === 1 && (
-            <div className="space-y-4">
-              <p className="text-zinc-400">What kind of agent do you need?</p>
-              
-              <div className="grid grid-cols-2 gap-3">
-                {PERSONAS.map(persona => (
-                  <button
-                    key={persona.id}
-                    onClick={() => {
-                      updateData('personaId', persona.id);
-                      updateData('model', persona.defaultModel);
-                      // Suggest a name
-                      const suggestedName = persona.suggestedNames[Math.floor(Math.random() * persona.suggestedNames.length)];
-                      updateData('agentName', suggestedName);
-                    }}
-                    className={`p-4 rounded-lg border text-left transition-all ${
-                      data.personaId === persona.id 
-                        ? 'border-emerald-500 bg-emerald-500/10' 
-                        : 'border-zinc-700 hover:border-zinc-600 hover:bg-zinc-800'
-                    }`}
-                  >
-                    <div className="flex items-center gap-3 mb-2">
-                      <span className="text-2xl">{persona.emoji}</span>
-                      <div>
-                        <h3 className="font-medium">{persona.name}</h3>
-                        <p className="text-xs text-zinc-500">{persona.tagline}</p>
-                      </div>
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Deploy New Agent</DialogTitle>
+          <DialogDescription>Step {step} of 3 — {step === 1 ? 'Choose persona' : step === 2 ? 'Configure' : 'Channels'}</DialogDescription>
+        </DialogHeader>
+
+        {/* Step 1: Persona */}
+        {step === 1 && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 gap-3">
+              {PERSONAS.map(p => (
+                <button
+                  key={p.id}
+                  onClick={() => {
+                    setData(d => ({ ...d, personaId: p.id, model: p.defaultModel, agentName: p.suggestedNames[0] }));
+                  }}
+                  className={`p-4 rounded-lg border text-left transition-all ${
+                    data.personaId === p.id ? 'border-primary bg-primary/5' : 'border-border hover:border-primary/50'
+                  }`}
+                >
+                  <div className="flex items-center gap-2 mb-2">
+                    <div className={`p-1.5 rounded ${data.personaId === p.id ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                      {p.icon}
                     </div>
-                    <p className="text-sm text-zinc-400 line-clamp-2">{persona.description}</p>
+                    <span className="font-medium">{p.name}</span>
+                  </div>
+                  <p className="text-xs text-muted-foreground">{p.tagline}</p>
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end">
+              <Button onClick={() => setStep(2)} disabled={!data.personaId}>Next</Button>
+            </div>
+          </div>
+        )}
+
+        {/* Step 2: Config */}
+        {step === 2 && (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Agent Name</Label>
+              <Input value={data.agentName} onChange={e => setData(d => ({ ...d, agentName: e.target.value }))} placeholder="Give your agent a name" />
+              <div className="flex gap-2">
+                {selectedPersona?.suggestedNames.map(n => (
+                  <Button key={n} variant="outline" size="sm" onClick={() => setData(d => ({ ...d, agentName: n }))}>{n}</Button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Infrastructure</Label>
+              <div className="grid grid-cols-2 gap-3">
+                {[
+                  { id: 'docker', name: 'Local Docker', desc: 'Free • Runs on your machine' },
+                  { id: 'e2b', name: 'E2B Cloud', desc: '$0.05/hr • Isolated VM' },
+                ].map(p => (
+                  <button
+                    key={p.id}
+                    onClick={() => setData(d => ({ ...d, infraProvider: p.id as InfraProvider }))}
+                    className={`p-3 rounded-lg border text-left ${data.infraProvider === p.id ? 'border-primary bg-primary/5' : 'border-border'}`}
+                  >
+                    <span className="font-medium">{p.name}</span>
+                    <p className="text-xs text-muted-foreground">{p.desc}</p>
                   </button>
                 ))}
               </div>
-
-              <div className="flex justify-end pt-4">
-                <button 
-                  onClick={() => setStep(2)} 
-                  disabled={!data.personaId}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-lg"
-                >
-                  Next →
-                </button>
-              </div>
             </div>
-          )}
 
-          {/* Step 2: Agent Identity */}
-          {step === 2 && selectedPersona && (
-            <div className="space-y-6">
-              <div className="flex items-center gap-4 p-4 bg-zinc-800 rounded-lg">
-                <span className="text-4xl">{selectedPersona.emoji}</span>
-                <div>
-                  <h3 className="font-medium">{selectedPersona.name}</h3>
-                  <p className="text-sm text-zinc-400">{selectedPersona.tagline}</p>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Agent Name</label>
-                <input
-                  type="text"
-                  value={data.agentName}
-                  onChange={(e) => updateData('agentName', e.target.value)}
-                  placeholder="Give your agent a name"
-                  className="w-full px-4 py-3 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-emerald-500 text-lg"
-                />
-                <div className="flex gap-2 mt-2">
-                  {selectedPersona.suggestedNames.map(name => (
-                    <button
-                      key={name}
-                      onClick={() => updateData('agentName', name)}
-                      className="px-3 py-1 text-sm bg-zinc-800 hover:bg-zinc-700 rounded-full"
-                    >
-                      {name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Where to run</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    onClick={() => updateData('infraProvider', 'docker')}
-                    className={`p-4 rounded-lg border text-left ${data.infraProvider === 'docker' ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-700 hover:border-zinc-600'}`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-2xl">🐳</span>
-                      <span className="font-medium">Local Docker</span>
-                    </div>
-                    <p className="text-xs text-zinc-500">Free • Runs on your machine</p>
-                  </button>
-                  <button
-                    onClick={() => updateData('infraProvider', 'e2b')}
-                    className={`p-4 rounded-lg border text-left ${data.infraProvider === 'e2b' ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-700 hover:border-zinc-600'}`}
-                  >
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className="text-2xl">☁️</span>
-                      <span className="font-medium">E2B Cloud</span>
-                    </div>
-                    <p className="text-xs text-zinc-500">$0.05/hr • Isolated VM with GUI</p>
-                  </button>
-                </div>
-                {data.infraProvider === 'e2b' && (
-                  <p className="text-xs text-yellow-500 mt-2">⚠️ Requires E2B_API_KEY in ~/.agentbox/secrets.env</p>
-                )}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Personality</label>
-                <div className="p-4 bg-zinc-800 rounded-lg space-y-2">
-                  <p><span className="text-zinc-500">Tone:</span> {selectedPersona.personality.tone}</p>
-                  <p><span className="text-zinc-500">Style:</span> {selectedPersona.personality.style}</p>
-                  <div className="flex gap-2 flex-wrap mt-2">
-                    {selectedPersona.personality.traits.map(trait => (
-                      <span key={trait} className="px-2 py-1 text-xs bg-zinc-700 rounded-full">{trait}</span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">Capabilities</label>
-                <div className="flex gap-2 flex-wrap">
-                  {selectedPersona.capabilities.map(cap => (
-                    <span key={cap} className="px-3 py-1 text-sm bg-green-900/30 text-green-400 rounded-full">✓ {cap}</span>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex justify-between pt-4">
-                <button onClick={() => setStep(1)} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg">
-                  ← Back
-                </button>
-                <button 
-                  onClick={() => setStep(3)} 
-                  disabled={!data.agentName}
-                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 rounded-lg"
-                >
-                  Next →
-                </button>
-              </div>
+            <div className="space-y-2">
+              <Label>Anthropic API Key</Label>
+              <Input type="password" value={data.anthropicKey} onChange={e => setData(d => ({ ...d, anthropicKey: e.target.value }))} placeholder="sk-ant-..." />
             </div>
-          )}
 
-          {/* Step 3: LLM Credentials */}
-          {step === 3 && (
-            <div className="space-y-6">
-              <p className="text-zinc-400">Configure the AI model that powers {data.agentName}.</p>
-
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-2">LLM Provider</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {[
-                    { id: 'anthropic', name: 'Anthropic', desc: 'Claude models', icon: '🧠' },
-                    { id: 'openai', name: 'OpenAI', desc: 'GPT models', icon: '💚' },
-                    { id: 'bedrock', name: 'AWS Bedrock', desc: 'Enterprise AWS', icon: '☁️' },
-                    { id: 'ollama', name: 'Ollama', desc: 'Local models', icon: '🦙' },
-                  ].map(p => (
-                    <button
-                      key={p.id}
-                      onClick={() => updateData('provider', p.id)}
-                      className={`p-3 rounded-lg border text-left ${
-                        data.provider === p.id ? 'border-emerald-500 bg-emerald-500/10' : 'border-zinc-700 hover:border-zinc-600'
-                      }`}
-                    >
-                      <span className="text-xl mr-2">{p.icon}</span>
-                      <span className="font-medium">{p.name}</span>
-                      <p className="text-xs text-zinc-500 mt-1">{p.desc}</p>
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {data.provider === 'anthropic' && (
-                <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-1">Anthropic API Key</label>
-                  <input
-                    type="password"
-                    value={data.anthropicKey || ''}
-                    onChange={(e) => updateData('anthropicKey', e.target.value)}
-                    placeholder="sk-ant-..."
-                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
-                  />
-                  <p className="text-xs text-zinc-500 mt-1">Get your key at console.anthropic.com</p>
-                </div>
-              )}
-
-              {data.provider === 'openai' && (
-                <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-1">OpenAI API Key</label>
-                  <input
-                    type="password"
-                    value={data.openaiKey || ''}
-                    onChange={(e) => updateData('openaiKey', e.target.value)}
-                    placeholder="sk-..."
-                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
-                  />
-                </div>
-              )}
-
-              {data.provider === 'bedrock' && (
-                <>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">AWS Access Key ID</label>
-                    <input
-                      type="password"
-                      value={data.bedrockAccessKey || ''}
-                      onChange={(e) => updateData('bedrockAccessKey', e.target.value)}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">AWS Secret Access Key</label>
-                    <input
-                      type="password"
-                      value={data.bedrockSecretKey || ''}
-                      onChange={(e) => updateData('bedrockSecretKey', e.target.value)}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-zinc-400 mb-1">Region</label>
-                    <select
-                      value={data.bedrockRegion || 'us-east-1'}
-                      onChange={(e) => updateData('bedrockRegion', e.target.value)}
-                      className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
-                    >
-                      <option value="us-east-1">US East (N. Virginia)</option>
-                      <option value="us-west-2">US West (Oregon)</option>
-                      <option value="eu-west-1">Europe (Ireland)</option>
-                    </select>
-                  </div>
-                </>
-              )}
-
-              {data.provider === 'ollama' && (
-                <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-1">Ollama Host</label>
-                  <input
-                    type="text"
-                    value={data.ollamaHost || ''}
-                    onChange={(e) => updateData('ollamaHost', e.target.value)}
-                    placeholder="http://host.docker.internal:11434"
-                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
-                  />
-                </div>
-              )}
-
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-1">Model</label>
-                <select
-                  value={data.model}
-                  onChange={(e) => updateData('model', e.target.value)}
-                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
-                >
-                  {data.provider === 'anthropic' && (
-                    <>
-                      <option value="anthropic/claude-sonnet-4-6">Claude Sonnet 4.6 (Recommended)</option>
-                      <option value="anthropic/claude-opus-4-6">Claude Opus 4.6 (Powerful)</option>
-                    </>
-                  )}
-                  {data.provider === 'openai' && (
-                    <>
-                      <option value="openai/gpt-4o">GPT-4o</option>
-                      <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
-                    </>
-                  )}
-                  {data.provider === 'bedrock' && (
-                    <>
-                      <option value="bedrock/anthropic.claude-sonnet-4-6-v1">Claude Sonnet 4.6</option>
-                      <option value="bedrock/anthropic.claude-opus-4-6-v1">Claude Opus 4.6</option>
-                    </>
-                  )}
-                  {data.provider === 'ollama' && (
-                    <>
-                      <option value="ollama/llama3.3">Llama 3.3</option>
-                      <option value="ollama/qwen2.5">Qwen 2.5</option>
-                    </>
-                  )}
-                </select>
-              </div>
-
-              <div className="flex justify-between pt-4">
-                <button onClick={() => setStep(2)} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg">
-                  ← Back
-                </button>
-                <button onClick={() => setStep(4)} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 rounded-lg">
-                  Next →
-                </button>
-              </div>
+            <div className="space-y-2">
+              <Label>Model</Label>
+              <Select value={data.model} onValueChange={v => setData(d => ({ ...d, model: v }))}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="anthropic/claude-sonnet-4-6">Claude Sonnet 4.6</SelectItem>
+                  <SelectItem value="anthropic/claude-opus-4-6">Claude Opus 4.6</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
-          )}
 
-          {/* Step 4: Channels & Deploy */}
-          {step === 4 && (
-            <div className="space-y-6">
-              <p className="text-zinc-400">Connect {data.agentName} to chat channels (optional).</p>
-
-              <div>
-                <label className="block text-sm font-medium text-zinc-400 mb-1">Telegram Bot Token</label>
-                <input
-                  type="password"
-                  value={data.telegramToken || ''}
-                  onChange={(e) => updateData('telegramToken', e.target.value)}
-                  placeholder="123456789:ABCdefGHI..."
-                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
-                />
-                <p className="text-xs text-zinc-500 mt-1">Create a bot via @BotFather on Telegram</p>
-              </div>
-
-              {data.telegramToken && (
-                <div>
-                  <label className="block text-sm font-medium text-zinc-400 mb-1">Allowed Telegram User IDs</label>
-                  <input
-                    type="text"
-                    value={data.telegramUserIds || ''}
-                    onChange={(e) => updateData('telegramUserIds', e.target.value)}
-                    placeholder="8576132014, 123456789"
-                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
-                  />
-                  <p className="text-xs text-zinc-500 mt-1">
-                    Comma-separated user IDs. Only these users can message the agent. 
-                    <a href="https://t.me/userinfobot" target="_blank" rel="noopener" className="text-emerald-400 hover:underline ml-1">Get your ID</a>
-                  </p>
-                </div>
-              )}
-
-              <div className="p-4 bg-zinc-800 rounded-lg">
-                <h4 className="font-medium mb-3">Summary</h4>
-                <div className="space-y-2 text-sm">
-                  <p><span className="text-zinc-500">Name:</span> {data.agentName}</p>
-                  <p><span className="text-zinc-500">Persona:</span> {selectedPersona?.emoji} {selectedPersona?.name}</p>
-                  <p><span className="text-zinc-500">Model:</span> {data.model}</p>
-                  <p><span className="text-zinc-500">Provider:</span> {data.provider}</p>
-                  <p><span className="text-zinc-500">Telegram:</span> {data.telegramToken ? '✓ Configured' : 'Not configured'}</p>
-                </div>
-              </div>
-
-              <div className="p-4 bg-emerald-900/20 border border-blue-800 rounded-lg">
-                <h4 className="font-medium text-emerald-400 mb-2">🚀 What happens next</h4>
-                <ul className="text-sm text-zinc-300 space-y-1">
-                  <li>• Docker container with OpenClaw + Chromium</li>
-                  <li>• VNC for real-time screen viewing</li>
-                  <li>• Browser automation ready (Claude Code)</li>
-                  <li>• Telegram bot connected (if configured)</li>
-                  <li>• Agent workspace with SOUL.md, MEMORY.md</li>
-                </ul>
-              </div>
-
-              {error && (
-                <div className="p-3 bg-red-900/50 border border-red-700 rounded-lg text-sm text-red-200">
-                  {error}
-                </div>
-              )}
-
-              <div className="flex justify-between pt-4">
-                <button onClick={() => setStep(3)} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg">
-                  ← Back
-                </button>
-                <button
-                  onClick={handleSubmit}
-                  disabled={loading}
-                  className="px-6 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg font-medium"
-                >
-                  {loading ? 'Deploying...' : '🚀 Deploy Agent'}
-                </button>
-              </div>
+            <div className="flex justify-between">
+              <Button variant="outline" onClick={() => setStep(1)}>Back</Button>
+              <Button onClick={() => setStep(3)} disabled={!data.agentName || !data.anthropicKey}>Next</Button>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        <button 
-          onClick={onClose} 
-          className="absolute top-4 right-4 w-8 h-8 flex items-center justify-center text-zinc-500 hover:text-white hover:bg-zinc-800 rounded-full"
-        >
-          ✕
-        </button>
-      </div>
-    </div>
+        {/* Step 3: Channels */}
+        {step === 3 && (
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>Telegram Bot Token (optional)</Label>
+              <Input type="password" value={data.telegramToken} onChange={e => setData(d => ({ ...d, telegramToken: e.target.value }))} placeholder="123456789:ABCdef..." />
+            </div>
+
+            {data.telegramToken && (
+              <div className="space-y-2">
+                <Label>Allowed User IDs</Label>
+                <Input value={data.telegramUserIds} onChange={e => setData(d => ({ ...d, telegramUserIds: e.target.value }))} placeholder="8576132014" />
+              </div>
+            )}
+
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle className="text-sm">Summary</CardTitle>
+              </CardHeader>
+              <CardContent className="text-sm space-y-1">
+                <p><span className="text-muted-foreground">Name:</span> {data.agentName}</p>
+                <p><span className="text-muted-foreground">Persona:</span> {selectedPersona?.name}</p>
+                <p><span className="text-muted-foreground">Model:</span> {data.model}</p>
+                <p><span className="text-muted-foreground">Infra:</span> {data.infraProvider}</p>
+              </CardContent>
+            </Card>
+
+            {data.infraProvider === 'e2b' && (
+              <p className="text-xs text-yellow-500">⏱️ E2B deployments take 3-5 minutes</p>
+            )}
+
+            <div className="flex justify-between">
+              <Button variant="outline" onClick={() => setStep(2)}>Back</Button>
+              <Button onClick={handleSubmit}>
+                <Zap className="w-4 h-4" />
+                Deploy Agent
+              </Button>
+            </div>
+          </div>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }

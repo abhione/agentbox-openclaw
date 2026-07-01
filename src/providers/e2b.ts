@@ -16,14 +16,14 @@ import { generateOpenClawConfig, generateSoulMd } from '../config-generator.js';
 interface E2BSandbox {
   sandboxId: string;
   getHost(port: number): string;
-  filesystem: {
-    write(path: string, content: string): Promise<void>;
-    makeDir(path: string): Promise<void>;
+  files: {
+    write(path: string, content: string | ArrayBuffer): Promise<{ path: string }>;
+    makeDir(path: string): Promise<boolean>;
   };
   commands: {
-    run(command: string, opts?: { timeout?: number; background?: boolean }): Promise<{ exitCode: number; stdout: string; stderr: string }>;
+    run(command: string, opts?: { timeoutMs?: number; background?: boolean }): Promise<{ exitCode: number; stdout: string; stderr: string }>;
   };
-  keepAlive(ms: number): Promise<void>;
+  keepAlive(timeoutMs: number): Promise<void>;
   kill(): Promise<void>;
 }
 
@@ -77,15 +77,12 @@ export class E2BProvider implements OpenClawProvider {
 
     req.onLog?.(`Creating E2B Desktop sandbox for "${req.name}"...`);
 
-    // Use Desktop sandbox for GUI support, fall back to base Sandbox
-    const SandboxClass = this.Desktop || this.Sandbox;
+    // Use base Sandbox (Desktop requires separate package)
+    req.onLog?.('Creating E2B sandbox...');
     
-    // E2B Desktop template with Ubuntu + XFCE + noVNC
-    const templateId = this.Desktop ? 'desktop' : 'base';
-    
-    const sandbox: E2BDesktopSandbox = await SandboxClass.create(templateId, {
+    const sandbox: E2BDesktopSandbox = await this.Sandbox.create({
       apiKey: this.apiKey,
-      timeoutMs: 60000,
+      timeoutMs: 300000,
       metadata: {
         name: req.name,
         provider: 'openclaw-observatory',
@@ -146,59 +143,75 @@ export class E2BProvider implements OpenClawProvider {
     config: any,
     req: CreateBoxRequest
   ): Promise<void> {
+    // E2B base sandbox has Node.js v20 but OpenClaw needs v22+
+    req.onLog?.('Upgrading Node.js to v22...');
+    
+    // Install n (Node version manager)
+    req.onLog?.('Running: npm install -g n');
+    let r = await sandbox.commands.run('npm install -g n 2>&1', { timeoutMs: 60000 });
+    req.onLog?.(`npm install -g n: exit=${r.exitCode}`);
+    if (r.exitCode !== 0) {
+      req.onLog?.(`stdout: ${r.stdout}`);
+      req.onLog?.(`stderr: ${r.stderr}`);
+      throw new Error(`Failed to install n: ${r.stderr || r.stdout}`);
+    }
+    
+    // Install Node 22
+    r = await sandbox.commands.run('n 22 2>&1', { timeoutMs: 120000 });
+    if (r.exitCode !== 0) {
+      throw new Error(`Failed to install Node 22: ${r.stderr || r.stdout}`);
+    }
+    
+    // Verify Node version
+    const nodeCheck = await sandbox.commands.run('/usr/local/bin/node --version');
+    req.onLog?.(`Node.js: ${nodeCheck.stdout.trim()}`);
+    
     // Create directories
     await sandbox.commands.run('mkdir -p /home/user/.openclaw /home/user/workspace');
 
     // Write OpenClaw config
-    await sandbox.filesystem.write(
+    req.onLog?.('Writing config...');
+    await sandbox.files.write(
       '/home/user/.openclaw/openclaw.json',
       JSON.stringify(config, null, 2)
     );
 
     // Write SOUL.md
     const soulMd = generateSoulMd(req.config);
-    await sandbox.filesystem.write('/home/user/workspace/SOUL.md', soulMd);
+    await sandbox.files.write('/home/user/workspace/SOUL.md', soulMd);
 
-    // Install OpenClaw (use npm since it's more reliable in E2B)
-    req.onLog?.('Installing OpenClaw...');
+    // Install OpenClaw globally with new Node (can take 3-5 minutes)
+    req.onLog?.('Installing OpenClaw (this takes 3-5 minutes)...');
     const installResult = await sandbox.commands.run(
-      'npm install -g openclaw@latest',
-      { timeout: 120000 }
+      '/usr/local/bin/npm install -g openclaw@latest 2>&1',
+      { timeoutMs: 600000 }  // 10 minute timeout
     );
     
     if (installResult.exitCode !== 0) {
-      throw new Error(`Failed to install OpenClaw: ${installResult.stderr}`);
+      req.onLog?.(`Install failed: ${installResult.stderr || installResult.stdout}`);
+      throw new Error(`Failed to install OpenClaw: ${installResult.stderr || installResult.stdout}`);
     }
+    req.onLog?.('OpenClaw installed!');
 
-    // Install Chromium for browser automation
-    req.onLog?.('Installing Chromium...');
-    await sandbox.commands.run(
-      'apt-get update && apt-get install -y chromium-browser',
-      { timeout: 180000 }
-    );
-
-    // Start Chromium with CDP
-    req.onLog?.('Starting Chromium...');
-    await sandbox.commands.run(
-      'chromium-browser --remote-debugging-port=18800 --no-sandbox --disable-gpu --disable-dev-shm-usage &',
-      { background: true }
-    );
-
-    // Start OpenClaw gateway
+    // Start OpenClaw gateway in background using new Node
     req.onLog?.('Starting OpenClaw gateway...');
     await sandbox.commands.run(
-      'cd /home/user/workspace && openclaw gateway run --bind 0.0.0.0 &',
-      { background: true }
+      'cd /home/user/workspace && HOME=/home/user nohup /usr/local/bin/node /usr/local/bin/openclaw gateway run  > /tmp/openclaw.log 2>&1 &'
     );
 
     // Wait for gateway to be ready
-    for (let i = 0; i < 30; i++) {
-      const check = await sandbox.commands.run('curl -s http://localhost:18789/health || true');
+    req.onLog?.('Waiting for gateway...');
+    for (let i = 0; i < 60; i++) {
+      const check = await sandbox.commands.run('curl -s http://localhost:18789/health 2>/dev/null || echo "not ready"');
       if (check.stdout.includes('ok')) {
+        req.onLog?.('Gateway ready!');
         return;
       }
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 2000));
     }
+    // Check logs if gateway didn't start
+    const logs = await sandbox.commands.run('cat /tmp/openclaw.log 2>/dev/null | tail -20');
+    req.onLog?.(`Gateway logs: ${logs.stdout}`);
   }
 
   private generateVncPassword(): string {
@@ -215,7 +228,7 @@ export class E2BProvider implements OpenClawProvider {
     
     // Restart OpenClaw if needed
     await sandbox.commands.run(
-      'pgrep -f "openclaw gateway" || (cd /home/user/workspace && openclaw gateway run --bind 0.0.0.0 &)',
+      'pgrep -f "openclaw gateway" || (cd /home/user/workspace && openclaw gateway run  &)',
       { background: true }
     );
   }

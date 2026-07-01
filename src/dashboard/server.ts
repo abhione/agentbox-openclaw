@@ -307,6 +307,112 @@ export class DashboardServer {
       }
     });
 
+    // SSE endpoint for streaming deploy progress (E2B)
+    this.app.get('/api/boxes/deploy-stream', async (req: Request, res: Response) => {
+      const { 
+        name, 
+        provider: providerName = 'docker',
+        persona,
+        model,
+        anthropicApiKey,
+        telegramToken,
+        telegramUserId,
+      } = req.query as Record<string, string>;
+
+      // Set up SSE
+      res.setHeader('Content-Type', 'text/event-stream');
+      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Connection', 'keep-alive');
+      res.flushHeaders();
+
+      const sendProgress = (stage: string, message: string, percent: number) => {
+        res.write(`data: ${JSON.stringify({ stage, message, percent })}\n\n`);
+      };
+
+      const sendError = (error: string) => {
+        res.write(`data: ${JSON.stringify({ error })}\n\n`);
+        res.end();
+      };
+
+      const sendDone = () => {
+        res.write(`data: ${JSON.stringify({ done: true, stage: 'done', message: 'Agent deployed!', percent: 100 })}\n\n`);
+        res.end();
+      };
+
+      try {
+        if (!name) {
+          sendError('Name is required');
+          return;
+        }
+
+        if (!anthropicApiKey) {
+          sendError('Anthropic API key is required');
+          return;
+        }
+
+        const provider = getProvider(providerName as ProviderName);
+
+        sendProgress('init', 'Creating sandbox...', 5);
+
+        const record = await provider.create({
+          name,
+          workspacePath: process.cwd(),
+          config: {
+            name,
+            model: model || 'anthropic/claude-sonnet-4-6',
+            persona,
+            channels: telegramToken ? {
+              telegram: { 
+                botToken: telegramToken,
+                allowedUserIds: telegramUserId ? [telegramUserId] : undefined,
+              },
+            } : undefined,
+          },
+          anthropicApiKey,
+          telegramUserId,
+          onLog: (line) => {
+            // Parse log messages to determine progress stage
+            let stage = 'init';
+            let percent = 10;
+            
+            if (line.includes('Upgrading Node') || line.includes('Node.js')) {
+              stage = 'node';
+              percent = 20;
+            } else if (line.includes('Installing OpenClaw') || line.includes('npm install')) {
+              stage = 'install';
+              percent = 40;
+            } else if (line.includes('OpenClaw installed') || line.includes('installed')) {
+              stage = 'install';
+              percent = 70;
+            } else if (line.includes('Writing config') || line.includes('config')) {
+              stage = 'config';
+              percent = 80;
+            } else if (line.includes('Starting') || line.includes('gateway')) {
+              stage = 'gateway';
+              percent = 90;
+            } else if (line.includes('ready') || line.includes('Ready')) {
+              stage = 'gateway';
+              percent = 95;
+            }
+            
+            sendProgress(stage, line, percent);
+            this.broadcast({ type: 'log', boxId: name, data: line });
+          },
+        });
+
+        // Save to state
+        const state = this.loadState();
+        state.boxes.push(record);
+        this.saveState(state);
+
+        this.broadcast({ type: 'box:created', box: record });
+        sendDone();
+      } catch (error) {
+        console.error('Deploy stream error:', error);
+        sendError(String(error));
+      }
+    });
+
     // Checkpoint (E2B only)
     this.app.post('/api/boxes/:id/checkpoint', async (req: Request, res: Response) => {
       try {
