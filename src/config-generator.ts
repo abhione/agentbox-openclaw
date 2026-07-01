@@ -64,9 +64,13 @@ export function generateOpenClawConfig(input: ConfigInput): GeneratedConfig {
     browser: {
       enabled: true,
       defaultProfile: 'chromium',
+      ssrfPolicy: {
+        dangerouslyAllowPrivateNetwork: true,
+      },
       profiles: {
         chromium: {
-          driver: 'openclaw',
+          driver: 'existing-session',
+          attachOnly: true,
           cdpUrl: 'http://127.0.0.1:18800',
           color: '#4285F4',
         },
@@ -92,11 +96,23 @@ export function generateOpenClawConfig(input: ConfigInput): GeneratedConfig {
       mode: 'merge',
     },
     plugins: {},
-    session: {},
+    session: {
+      scope: 'per-sender',
+      dmScope: 'per-channel-peer',
+      reset: {
+        mode: 'idle',
+        idleMinutes: 60,
+      },
+    },
     skills: {},
     mcp: {},
     commands: {},
-    messages: {},
+    messages: {
+      queue: {
+        mode: 'followup',
+        debounceMs: 500,
+      },
+    },
     env: {},
   };
 
