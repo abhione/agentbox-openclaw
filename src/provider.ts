@@ -227,7 +227,8 @@ export class OpenClawProvider {
         RestartPolicy: { Name: 'unless-stopped' },
       },
       Env: [
-        `OPENCLAW_CONFIG=${JSON.stringify(openclawConfig)}`,
+        // Note: Full config is injected via injectConfig() after container start
+        // Don't use OPENCLAW_CONFIG env var - it would be overwritten on restart
         'DISPLAY=:1',
         'VNC_ENABLED=true',
       ],

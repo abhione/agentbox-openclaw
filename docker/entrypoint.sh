@@ -5,12 +5,15 @@ echo "╔═══════════════════════�
 echo "║     🔭 Agent Observatory Container        ║"
 echo "╚═══════════════════════════════════════════╝"
 
-# Initialize OpenClaw config if provided via env
-if [ -n "$OPENCLAW_CONFIG" ]; then
-    echo "📝 Injecting OpenClaw config..."
+# Initialize OpenClaw config if provided via env AND config doesn't exist yet
+# This prevents overwriting a properly configured config on container restart
+if [ -n "$OPENCLAW_CONFIG" ] && [ ! -f /home/agent/.openclaw/openclaw.json ]; then
+    echo "📝 Injecting initial OpenClaw config..."
     mkdir -p /home/agent/.openclaw
     echo "$OPENCLAW_CONFIG" > /home/agent/.openclaw/openclaw.json
     chown -R agent:agent /home/agent/.openclaw 2>/dev/null || true
+elif [ -f /home/agent/.openclaw/openclaw.json ]; then
+    echo "✅ Using existing OpenClaw config"
 fi
 
 # Create workspace directories
