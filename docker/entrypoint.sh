@@ -23,9 +23,9 @@ touch /home/agent/.vnc/passwd
 chmod 600 /home/agent/.vnc/passwd 2>/dev/null || true
 chown -R agent:agent /home/agent/.vnc 2>/dev/null || true
 
-# Create log file
-touch /tmp/openclaw.log
-chown agent:agent /tmp/openclaw.log
+# Create log files
+touch /tmp/openclaw.log /tmp/novnc.log /tmp/chromium.log
+chown agent:agent /tmp/openclaw.log /tmp/novnc.log /tmp/chromium.log
 
 echo "🖥️  Starting VNC server..."
 su - agent -c "vncserver :1 -geometry 1920x1080 -depth 24 -SecurityTypes None -localhost no --I-KNOW-THIS-IS-INSECURE" &
@@ -35,12 +35,34 @@ echo "🌐 Starting noVNC proxy..."
 su - agent -c "/usr/share/novnc/utils/novnc_proxy --vnc localhost:5901 --listen 6080 2>&1 | tee /tmp/novnc.log" &
 sleep 2
 
+echo "🌍 Starting Chromium browser (CDP port 18800)..."
+su - agent -c "DISPLAY=:1 chromium \
+    --remote-debugging-port=18800 \
+    --no-sandbox \
+    --disable-setuid-sandbox \
+    --no-first-run \
+    --no-default-browser-check \
+    --disable-gpu \
+    --disable-software-rasterizer \
+    --disable-dev-shm-usage \
+    --disable-background-networking \
+    --disable-sync \
+    --disable-translate \
+    --metrics-recording-only \
+    --safebrowsing-disable-auto-update \
+    2>&1 | tee /tmp/chromium.log" &
+sleep 3
+
+# Verify Chromium started
+if curl -s http://localhost:18800/json/version > /dev/null 2>&1; then
+    echo "✅ Chromium CDP ready on port 18800"
+else
+    echo "⚠️  Chromium may still be starting..."
+fi
+
 # Start OpenClaw gateway
 if [ -f /home/agent/.openclaw/openclaw.json ]; then
     echo "🚀 Starting OpenClaw gateway..."
-    
-    # Validate config first
-    su - agent -c "cd /home/agent/workspace && openclaw config validate 2>&1" || true
     
     # Start gateway in background
     su - agent -c "cd /home/agent/workspace && openclaw gateway run --bind lan 2>&1 | tee /tmp/openclaw.log" &
@@ -53,7 +75,6 @@ if [ -f /home/agent/.openclaw/openclaw.json ]; then
         echo "✅ OpenClaw gateway started successfully"
     else
         echo "⚠️  Gateway may still be starting, check /tmp/openclaw.log"
-        tail -20 /tmp/openclaw.log
     fi
 else
     echo "⚠️  No OpenClaw config found at /home/agent/.openclaw/openclaw.json"
@@ -70,7 +91,7 @@ echo ""
 echo "  VNC:     port 5901"
 echo "  noVNC:   port 6080"
 echo "  Gateway: port 18789"
-echo "  Browser: port 18800"
+echo "  Browser: port 18800 (Chromium CDP)"
 echo ""
 
 # Keep container running

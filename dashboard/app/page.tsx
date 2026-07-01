@@ -48,7 +48,7 @@ const PERSONAS: AgentPersona[] = [
     emoji: '👔',
     tagline: 'Your tireless chief of staff',
     description: 'Manages calendars, drafts communications, researches topics, and handles administrative tasks.',
-    defaultModel: 'anthropic/claude-sonnet-4-20250514',
+    defaultModel: 'anthropic/claude-sonnet-4-6',
     personality: { tone: 'Professional, warm, efficient', style: 'Concise but thorough', traits: ['Organized', 'Proactive', 'Discreet'] },
     capabilities: ['Calendar management', 'Email drafting', 'Research', 'Travel planning'],
     suggestedNames: ['Alexandra', 'Marcus', 'Victoria', 'James']
@@ -59,7 +59,7 @@ const PERSONAS: AgentPersona[] = [
     emoji: '🎯',
     tagline: 'Outbound machine that books meetings',
     description: 'Researches prospects, crafts personalized outreach, and books qualified meetings.',
-    defaultModel: 'anthropic/claude-sonnet-4-20250514',
+    defaultModel: 'anthropic/claude-sonnet-4-6',
     personality: { tone: 'Confident, friendly', style: 'Conversational, value-focused', traits: ['Persistent', 'Empathetic', 'Results-oriented'] },
     capabilities: ['Prospect research', 'Personalized outreach', 'Objection handling', 'Meeting scheduling'],
     suggestedNames: ['Jordan', 'Taylor', 'Morgan', 'Casey']
@@ -70,7 +70,7 @@ const PERSONAS: AgentPersona[] = [
     emoji: '🤝',
     tagline: 'Keeps customers happy and growing',
     description: 'Onboards customers, monitors health, identifies expansion, and prevents churn.',
-    defaultModel: 'anthropic/claude-sonnet-4-20250514',
+    defaultModel: 'anthropic/claude-sonnet-4-6',
     personality: { tone: 'Warm, supportive', style: 'Patient and thorough', traits: ['Empathetic', 'Strategic', 'Celebratory'] },
     capabilities: ['Customer onboarding', 'Health monitoring', 'QBR preparation', 'Churn prevention'],
     suggestedNames: ['Olivia', 'Ethan', 'Sophia', 'Noah']
@@ -81,7 +81,7 @@ const PERSONAS: AgentPersona[] = [
     emoji: '✍️',
     tagline: 'Writes content that converts',
     description: 'Creates blog posts, social content, email campaigns, and marketing copy.',
-    defaultModel: 'anthropic/claude-sonnet-4-20250514',
+    defaultModel: 'anthropic/claude-sonnet-4-6',
     personality: { tone: 'Engaging, authentic', style: 'Clear and compelling', traits: ['Creative', 'Strategic', 'Versatile'] },
     capabilities: ['Blog writing', 'Social media', 'Email campaigns', 'Ad copy'],
     suggestedNames: ['Quinn', 'Avery', 'Riley', 'Blake']
@@ -92,7 +92,7 @@ const PERSONAS: AgentPersona[] = [
     emoji: '🔬',
     tagline: 'Deep dives that drive decisions',
     description: 'Conducts market research, competitive analysis, and data synthesis.',
-    defaultModel: 'anthropic/claude-opus-4-5',
+    defaultModel: 'anthropic/claude-opus-4-6',
     personality: { tone: 'Analytical, thorough', style: 'Structured with clear takeaways', traits: ['Curious', 'Rigorous', 'Objective'] },
     capabilities: ['Market research', 'Competitive analysis', 'Trend identification', 'Report writing'],
     suggestedNames: ['Morgan', 'Parker', 'Reese', 'Sage']
@@ -103,7 +103,7 @@ const PERSONAS: AgentPersona[] = [
     emoji: '📚',
     tagline: 'Documentation developers love',
     description: 'Creates API docs, user guides, tutorials, and technical content.',
-    defaultModel: 'anthropic/claude-sonnet-4-20250514',
+    defaultModel: 'anthropic/claude-sonnet-4-6',
     personality: { tone: 'Clear, precise', style: 'Structured, example-rich', traits: ['Precise', 'Empathetic', 'Systematic'] },
     capabilities: ['API documentation', 'User guides', 'Tutorials', 'Code examples'],
     suggestedNames: ['Alex', 'Sam', 'Jamie', 'Drew']
@@ -114,7 +114,7 @@ const PERSONAS: AgentPersona[] = [
     emoji: '🔍',
     tagline: 'Finds and attracts top talent',
     description: 'Sources candidates, crafts outreach, screens applicants, coordinates hiring.',
-    defaultModel: 'anthropic/claude-sonnet-4-20250514',
+    defaultModel: 'anthropic/claude-sonnet-4-6',
     personality: { tone: 'Enthusiastic, genuine', style: 'Personal, never spammy', traits: ['Persistent', 'Perceptive', 'Organized'] },
     capabilities: ['Candidate sourcing', 'Outreach campaigns', 'Resume screening', 'Interview coordination'],
     suggestedNames: ['Meg', 'Spencer', 'Robin', 'Cameron']
@@ -125,7 +125,7 @@ const PERSONAS: AgentPersona[] = [
     emoji: '⚙️',
     tagline: 'Automates the boring stuff',
     description: 'Identifies repetitive tasks, builds automations, optimizes workflows.',
-    defaultModel: 'anthropic/claude-sonnet-4-20250514',
+    defaultModel: 'anthropic/claude-sonnet-4-6',
     personality: { tone: 'Practical, efficient', style: 'Direct, documents everything', traits: ['Systematic', 'Reliable', 'Efficiency-obsessed'] },
     capabilities: ['Workflow automation', 'Integration management', 'Process documentation', 'Report generation'],
     suggestedNames: ['Dana', 'Ellis', 'Phoenix', 'Rowan']
@@ -408,7 +408,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
     personaId: '',
     agentName: '',
     provider: 'anthropic',
-    model: 'anthropic/claude-sonnet-4-20250514',
+    model: 'anthropic/claude-sonnet-4-6',
   });
 
   const selectedPersona = PERSONAS.find(p => p.id === data.personaId);
@@ -419,9 +419,9 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
       // Update model when provider changes
       if (field === 'provider') {
         const models: Record<LLMProvider, string> = {
-          anthropic: 'anthropic/claude-sonnet-4-5',
+          anthropic: 'anthropic/claude-sonnet-4-6',
           openai: 'openai/gpt-4o',
-          bedrock: 'bedrock/anthropic.claude-sonnet-4-5-v1',
+          bedrock: 'bedrock/anthropic.claude-sonnet-4-6-v1',
           ollama: 'ollama/llama3.3'
         };
         updated.model = models[value as LLMProvider];
@@ -715,8 +715,8 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 >
                   {data.provider === 'anthropic' && (
                     <>
-                      <option value="anthropic/claude-sonnet-4-5">Claude Sonnet 4.5 (Recommended)</option>
-                      <option value="anthropic/claude-opus-4-5">Claude Opus 4.5 (Powerful)</option>
+                      <option value="anthropic/claude-sonnet-4-6">Claude Sonnet 4.6 (Recommended)</option>
+                      <option value="anthropic/claude-opus-4-6">Claude Opus 4.6 (Powerful)</option>
                     </>
                   )}
                   {data.provider === 'openai' && (
@@ -727,8 +727,8 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                   )}
                   {data.provider === 'bedrock' && (
                     <>
-                      <option value="bedrock/anthropic.claude-sonnet-4-5-v1">Claude Sonnet 4.5</option>
-                      <option value="bedrock/anthropic.claude-opus-4-5-v1">Claude Opus 4.5</option>
+                      <option value="bedrock/anthropic.claude-sonnet-4-6-v1">Claude Sonnet 4.6</option>
+                      <option value="bedrock/anthropic.claude-opus-4-6-v1">Claude Opus 4.6</option>
                     </>
                   )}
                   {data.provider === 'ollama' && (
