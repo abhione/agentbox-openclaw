@@ -419,9 +419,9 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
       // Update model when provider changes
       if (field === 'provider') {
         const models: Record<LLMProvider, string> = {
-          anthropic: 'anthropic/claude-sonnet-4-20250514',
+          anthropic: 'anthropic/claude-sonnet-4-5',
           openai: 'openai/gpt-4o',
-          bedrock: 'bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0',
+          bedrock: 'bedrock/anthropic.claude-sonnet-4-5-v1',
           ollama: 'ollama/llama3.3'
         };
         updated.model = models[value as LLMProvider];
@@ -715,7 +715,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 >
                   {data.provider === 'anthropic' && (
                     <>
-                      <option value="anthropic/claude-sonnet-4-20250514">Claude Sonnet 4 (Fast)</option>
+                      <option value="anthropic/claude-sonnet-4-5">Claude Sonnet 4.5 (Recommended)</option>
                       <option value="anthropic/claude-opus-4-5">Claude Opus 4.5 (Powerful)</option>
                     </>
                   )}
@@ -727,8 +727,8 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                   )}
                   {data.provider === 'bedrock' && (
                     <>
-                      <option value="bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0">Claude Sonnet 4</option>
-                      <option value="bedrock/us.anthropic.claude-opus-4-20250514-v1:0">Claude Opus 4</option>
+                      <option value="bedrock/anthropic.claude-sonnet-4-5-v1">Claude Sonnet 4.5</option>
+                      <option value="bedrock/anthropic.claude-opus-4-5-v1">Claude Opus 4.5</option>
                     </>
                   )}
                   {data.provider === 'ollama' && (

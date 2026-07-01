@@ -26,7 +26,7 @@ export const AGENT_PERSONAS: AgentPersona[] = [
     emoji: '👔',
     tagline: 'Your tireless chief of staff',
     description: 'Manages calendars, drafts communications, researches topics, and handles administrative tasks with professionalism and discretion.',
-    defaultModel: 'anthropic/claude-sonnet-4-20250514',
+    defaultModel: 'anthropic/claude-sonnet-4-6',
     personality: {
       tone: 'Professional, warm, and efficient',
       style: 'Concise but thorough, anticipates needs',
@@ -57,7 +57,7 @@ When given a task, confirm understanding, execute thoroughly, and report back wi
     emoji: '🎯',
     tagline: 'Outbound machine that books meetings',
     description: 'Researches prospects, crafts personalized outreach, handles objections, and books qualified meetings for your sales team.',
-    defaultModel: 'anthropic/claude-sonnet-4-20250514',
+    defaultModel: 'anthropic/claude-sonnet-4-6',
     personality: {
       tone: 'Confident, friendly, value-focused',
       style: 'Conversational, not salesy. Genuinely helpful.',
@@ -92,7 +92,7 @@ Never be desperate. You have value to offer. If they're not a fit, move on grace
     emoji: '🤝',
     tagline: 'Keeps customers happy and growing',
     description: 'Onboards new customers, monitors health scores, identifies expansion opportunities, and prevents churn through proactive engagement.',
-    defaultModel: 'anthropic/claude-sonnet-4-20250514',
+    defaultModel: 'anthropic/claude-sonnet-4-6',
     personality: {
       tone: 'Warm, supportive, solution-oriented',
       style: 'Patient and thorough, celebrates wins',
@@ -132,7 +132,7 @@ Remember: A churned customer is a failure of anticipation, not just execution.`,
     emoji: '✍️',
     tagline: 'Writes content that converts',
     description: 'Creates blog posts, social content, email campaigns, and marketing copy that drives engagement and conversions.',
-    defaultModel: 'anthropic/claude-sonnet-4-20250514',
+    defaultModel: 'anthropic/claude-sonnet-4-6',
     personality: {
       tone: 'Engaging, authentic, brand-aligned',
       style: 'Clear and compelling, adapts to platform',
@@ -169,7 +169,7 @@ Stay on brand. If the brand is playful, be playful everywhere. If it's authorita
     emoji: '🔬',
     tagline: 'Deep dives that drive decisions',
     description: 'Conducts market research, competitive analysis, and data synthesis to inform strategic decisions.',
-    defaultModel: 'anthropic/claude-opus-4-5',
+    defaultModel: 'anthropic/claude-opus-4-6',
     personality: {
       tone: 'Analytical, thorough, evidence-based',
       style: 'Structured and comprehensive with clear takeaways',
@@ -212,7 +212,7 @@ Stay on brand. If the brand is playful, be playful everywhere. If it's authorita
     emoji: '📚',
     tagline: 'Documentation that developers love',
     description: 'Creates API docs, user guides, tutorials, and technical content that makes complex things simple.',
-    defaultModel: 'anthropic/claude-sonnet-4-20250514',
+    defaultModel: 'anthropic/claude-sonnet-4-6',
     personality: {
       tone: 'Clear, precise, developer-friendly',
       style: 'Structured, example-rich, no fluff',
@@ -255,7 +255,7 @@ Stay on brand. If the brand is playful, be playful everywhere. If it's authorita
     emoji: '🔍',
     tagline: 'Finds and attracts top talent',
     description: 'Sources candidates, crafts compelling outreach, screens applicants, and coordinates the hiring process.',
-    defaultModel: 'anthropic/claude-sonnet-4-20250514',
+    defaultModel: 'anthropic/claude-sonnet-4-6',
     personality: {
       tone: 'Enthusiastic, genuine, opportunity-focused',
       style: 'Personal and compelling, never spammy',
@@ -297,7 +297,7 @@ Remember: Every candidate is a future customer, partner, or referral source. Tre
     emoji: '⚙️',
     tagline: 'Automates the boring stuff',
     description: 'Identifies repetitive tasks, builds automations, maintains integrations, and optimizes operational workflows.',
-    defaultModel: 'anthropic/claude-sonnet-4-20250514',
+    defaultModel: 'anthropic/claude-sonnet-4-6',
     personality: {
       tone: 'Practical, efficient, solution-focused',
       style: 'Direct, explains the why, documents everything',

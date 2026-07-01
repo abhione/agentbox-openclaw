@@ -87,7 +87,10 @@ export function generateOpenClawConfig(input: ConfigInput): GeneratedConfig {
     channels: {},
     approvals: {},
     cron: {},
-    models: {},
+    models: {
+      providers: {},
+      mode: 'merge',
+    },
     plugins: {},
     session: {},
     skills: {},
@@ -100,19 +103,33 @@ export function generateOpenClawConfig(input: ConfigInput): GeneratedConfig {
   // Credential files to inject
   const credentialFiles: { [path: string]: string } = {};
 
-  // Auth profiles - token is stored in separate file
+  // Auth profiles for provider resolution
   const authProfiles = (config.auth as { profiles: Record<string, unknown> }).profiles;
+  
+  // Model providers config - this is where API keys actually go
+  const modelProviders = (config.models as { providers: Record<string, unknown> }).providers;
   
   if (input.provider === 'anthropic' && input.credentials.anthropicKey) {
     authProfiles['anthropic:default'] = {
       provider: 'anthropic',
       mode: 'token',
     };
+    // API key goes in models.providers.anthropic
+    modelProviders['anthropic'] = {
+      apiKey: input.credentials.anthropicKey,
+      api: 'anthropic-messages',
+      baseUrl: 'https://api.anthropic.com',
+    };
+    // Also store in credentials file for backup
     credentialFiles['credentials/anthropic-key'] = input.credentials.anthropicKey;
   } else if (input.provider === 'openai' && input.credentials.openaiKey) {
     authProfiles['openai:default'] = {
       provider: 'openai',
       mode: 'token',
+    };
+    modelProviders['openai'] = {
+      apiKey: input.credentials.openaiKey,
+      baseUrl: 'https://api.openai.com/v1',
     };
     credentialFiles['credentials/openai-key'] = input.credentials.openaiKey;
   } else if (input.provider === 'bedrock' && input.credentials.bedrockAccessKey) {
@@ -121,15 +138,18 @@ export function generateOpenClawConfig(input: ConfigInput): GeneratedConfig {
       mode: 'iam',
       region: input.credentials.bedrockRegion || 'us-east-1',
     };
-    // Bedrock uses AWS credential files
-    credentialFiles['credentials/bedrock-credentials'] = `[default]
-aws_access_key_id = ${input.credentials.bedrockAccessKey}
-aws_secret_access_key = ${input.credentials.bedrockSecretKey}
-region = ${input.credentials.bedrockRegion || 'us-east-1'}`;
+    modelProviders['bedrock'] = {
+      accessKeyId: input.credentials.bedrockAccessKey,
+      secretAccessKey: input.credentials.bedrockSecretKey,
+      region: input.credentials.bedrockRegion || 'us-east-1',
+    };
   } else if (input.provider === 'ollama') {
     authProfiles['ollama:default'] = {
       provider: 'ollama',
       host: input.credentials.ollamaHost || 'http://host.docker.internal:11434',
+    };
+    modelProviders['ollama'] = {
+      baseUrl: input.credentials.ollamaHost || 'http://host.docker.internal:11434',
     };
   }
 
