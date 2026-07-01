@@ -1,6 +1,6 @@
 {
   "name": "@openclaw/agentbox",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "OpenClaw Provider for AgentBox - Run AI agents with VNC screen sharing",
   "type": "module",
   "main": "dist/index.js",
@@ -23,8 +23,8 @@
     "docker"
   ],
   "scripts": {
-    "build": "tsup src/index.ts src/provider.ts src/cli.ts src/dashboard/server.ts --format esm --dts --clean",
-    "dev": "tsup src/index.ts src/provider.ts src/cli.ts src/dashboard/server.ts --format esm --dts --watch",
+    "build": "tsup src/index.ts src/providers/index.ts src/cli.ts src/dashboard/server.ts src/config-generator.ts src/personas.ts --format esm --dts --clean",
+    "dev": "tsup src/index.ts src/providers/index.ts src/cli.ts src/dashboard/server.ts src/config-generator.ts src/personas.ts --format esm --dts --watch",
     "docker:build": "docker build -f docker/Dockerfile.full -t openclaw/agentbox:full docker/",
     "docker:build:minimal": "docker build -f docker/Dockerfile.minimal -t openclaw/agentbox:minimal docker/",
     "test": "echo 'No tests yet'",
@@ -48,6 +48,8 @@
     "chalk": "^5.6.2",
     "commander": "^15.0.0",
     "dockerode": "^4.0.2",
+    "e2b": "^2.27.1",
+    "@e2b/desktop": "^2.3.1",
     "express": "^4.21.2",
     "open": "^11.0.0",
     "ws": "^8.18.0",

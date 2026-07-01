@@ -1,13 +1,28 @@
 import express, { type Express, type Request, type Response } from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer, type Server } from 'http';
-import { openclawProvider, type BoxRecord } from '../provider.js';
-import { generateOpenClawConfig, generateWorkspaceFiles, type GeneratedConfig } from '../config-generator.js';
+import { 
+  getProvider, 
+  listProviders, 
+  isProviderAvailable,
+  type BoxRecord,
+  type BoxWithState,
+  type ProviderName,
+} from '../providers/index.js';
+import { generateSoulMd } from '../config-generator.js';
 import * as path from 'path';
 import * as fs from 'fs';
+import * as os from 'os';
+
+const STATE_DIR = path.join(os.homedir(), '.agentbox', 'openclaw');
+const STATE_FILE = path.join(STATE_DIR, 'boxes.json');
 
 export interface DashboardServerOptions {
   port?: number;
+}
+
+interface BoxesState {
+  boxes: BoxRecord[];
 }
 
 export class DashboardServer {
@@ -19,14 +34,28 @@ export class DashboardServer {
   private subscriptions: Map<WebSocket, string> = new Map();
 
   constructor(options: DashboardServerOptions = {}) {
-    this.port = options.port || 3456;
+    this.port = options.port || 3457;
     this.app = express();
     this.server = createServer(this.app);
     this.wss = new WebSocketServer({ server: this.server });
 
+    fs.mkdirSync(STATE_DIR, { recursive: true });
+    
     this.setupMiddleware();
     this.setupRoutes();
     this.setupWebSocket();
+  }
+
+  private loadState(): BoxesState {
+    try {
+      return JSON.parse(fs.readFileSync(STATE_FILE, 'utf-8'));
+    } catch {
+      return { boxes: [] };
+    }
+  }
+
+  private saveState(state: BoxesState): void {
+    fs.writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
   }
 
   private setupMiddleware(): void {
@@ -54,18 +83,37 @@ export class DashboardServer {
   private setupRoutes(): void {
     // Health check
     this.app.get('/health', (req: Request, res: Response) => {
-      res.json({ status: 'ok', version: '0.1.0' });
+      res.json({ status: 'ok', version: '0.2.0' });
+    });
+
+    // List available providers
+    this.app.get('/api/providers', (req: Request, res: Response) => {
+      const providers = listProviders().map(name => ({
+        name,
+        available: isProviderAvailable(name),
+        description: name === 'docker' ? 'Local Docker containers' : 'E2B Cloud Desktop VMs',
+      }));
+      res.json(providers);
     });
 
     // List boxes with state
     this.app.get('/api/boxes', async (req: Request, res: Response) => {
       try {
-        const boxes = openclawProvider.list();
-        // Enrich with current state
-        const enriched = await Promise.all(boxes.map(async (box) => {
-          const state = await openclawProvider.probeState(box);
-          return { ...box, state };
-        }));
+        const state = this.loadState();
+        
+        // Enrich with current state from providers
+        const enriched: BoxWithState[] = await Promise.all(
+          state.boxes.map(async (box) => {
+            try {
+              const provider = getProvider(box.provider);
+              const runtimeState = await provider.probeState(box);
+              return { ...box, state: runtimeState };
+            } catch {
+              return { ...box, state: 'missing' as const };
+            }
+          })
+        );
+        
         res.json(enriched);
       } catch (error) {
         res.status(500).json({ error: String(error) });
@@ -75,67 +123,77 @@ export class DashboardServer {
     // Get box
     this.app.get('/api/boxes/:id', async (req: Request, res: Response) => {
       try {
-        const box = await openclawProvider.get(req.params.id);
+        const state = this.loadState();
+        const box = state.boxes.find(b => b.id === req.params.id || b.name.toLowerCase() === req.params.id.toLowerCase());
         if (!box) {
           res.status(404).json({ error: 'Box not found' });
           return;
         }
-        res.json(box);
+        
+        const provider = getProvider(box.provider);
+        const runtimeState = await provider.probeState(box);
+        const endpoints = await provider.getEndpoints(box);
+        
+        res.json({ ...box, state: runtimeState, endpoints });
       } catch (error) {
         res.status(500).json({ error: String(error) });
       }
     });
 
-    // Create box with full onboarding
+    // Create box
     this.app.post('/api/boxes', async (req: Request, res: Response) => {
       try {
         const { 
           name, 
+          provider: providerName = 'docker',
           workspacePath, 
-          config, 
-          image,
           persona,
-          credentials,
           model,
+          anthropicApiKey,
           telegramToken,
-          telegramAllowedUsers,
+          telegramUserId,
         } = req.body;
 
-        // Generate proper OpenClaw config and credential files
-        const generated = generateOpenClawConfig({
-          agentName: config?.name || name,
-          model: model || 'anthropic/claude-sonnet-4-20250514',
-          provider: credentials?.provider || 'anthropic',
-          credentials: credentials || {},
-          telegramToken,
-          telegramAllowedUsers,
-          personaId: persona,
-        });
+        if (!name) {
+          res.status(400).json({ error: 'Name is required' });
+          return;
+        }
 
-        // Generate workspace files
-        const workspaceFiles = generateWorkspaceFiles({
-          agentName: config?.name || name,
-          model: model || 'anthropic/claude-sonnet-4-20250514',
-          provider: credentials?.provider || 'anthropic',
-          credentials: credentials || {},
-          personaId: persona,
-        });
+        if (!anthropicApiKey) {
+          res.status(400).json({ error: 'Anthropic API key is required' });
+          return;
+        }
 
-        const result = await openclawProvider.create({
+        const provider = getProvider(providerName as ProviderName);
+
+        this.broadcast({ type: 'log', boxId: name, data: `Creating ${name} on ${providerName}...` });
+
+        const record = await provider.create({
           name,
           workspacePath: workspacePath || process.cwd(),
-          projectRoot: workspacePath || process.cwd(),
-          image,
-          vnc: { enabled: true },
-          providerOptions: { openclawConfig: config },
-          openclawConfig: generated.openclawConfig,
-          credentialFiles: generated.credentialFiles,
-          workspaceFiles,
+          config: {
+            name,
+            model: model || 'anthropic/claude-sonnet-4-6',
+            persona,
+            channels: telegramToken ? {
+              telegram: { 
+                botToken: telegramToken,
+                allowedUserIds: telegramUserId ? [telegramUserId] : undefined,
+              },
+            } : undefined,
+          },
+          anthropicApiKey,
+          telegramUserId,
           onLog: (line) => this.broadcast({ type: 'log', boxId: name, data: line }),
         });
 
-        this.broadcast({ type: 'box:created', box: result.record });
-        res.json(result);
+        // Save to state
+        const state = this.loadState();
+        state.boxes.push(record);
+        this.saveState(state);
+
+        this.broadcast({ type: 'box:created', box: record });
+        res.json(record);
       } catch (error) {
         console.error('Create box error:', error);
         res.status(500).json({ error: String(error) });
@@ -145,12 +203,16 @@ export class DashboardServer {
     // Start box
     this.app.post('/api/boxes/:id/start', async (req: Request, res: Response) => {
       try {
-        const box = await openclawProvider.get(req.params.id);
+        const state = this.loadState();
+        const box = state.boxes.find(b => b.id === req.params.id);
         if (!box) {
           res.status(404).json({ error: 'Box not found' });
           return;
         }
-        await openclawProvider.start(box);
+        
+        const provider = getProvider(box.provider);
+        await provider.start(box);
+        
         this.broadcast({ type: 'box:started', boxId: req.params.id });
         res.json({ ok: true });
       } catch (error) {
@@ -161,12 +223,16 @@ export class DashboardServer {
     // Stop box
     this.app.post('/api/boxes/:id/stop', async (req: Request, res: Response) => {
       try {
-        const box = await openclawProvider.get(req.params.id);
+        const state = this.loadState();
+        const box = state.boxes.find(b => b.id === req.params.id);
         if (!box) {
           res.status(404).json({ error: 'Box not found' });
           return;
         }
-        await openclawProvider.stop(box);
+        
+        const provider = getProvider(box.provider);
+        await provider.stop(box);
+        
         this.broadcast({ type: 'box:stopped', boxId: req.params.id });
         res.json({ ok: true });
       } catch (error) {
@@ -177,12 +243,21 @@ export class DashboardServer {
     // Destroy box
     this.app.delete('/api/boxes/:id', async (req: Request, res: Response) => {
       try {
-        const box = await openclawProvider.get(req.params.id);
-        if (!box) {
+        const state = this.loadState();
+        const boxIndex = state.boxes.findIndex(b => b.id === req.params.id);
+        if (boxIndex === -1) {
           res.status(404).json({ error: 'Box not found' });
           return;
         }
-        await openclawProvider.destroy(box);
+        
+        const box = state.boxes[boxIndex];
+        const provider = getProvider(box.provider);
+        await provider.destroy(box);
+        
+        // Remove from state
+        state.boxes.splice(boxIndex, 1);
+        this.saveState(state);
+        
         this.broadcast({ type: 'box:destroyed', boxId: req.params.id });
         res.json({ ok: true });
       } catch (error) {
@@ -193,31 +268,65 @@ export class DashboardServer {
     // Execute command in box
     this.app.post('/api/boxes/:id/exec', async (req: Request, res: Response) => {
       try {
-        const box = await openclawProvider.get(req.params.id);
+        const state = this.loadState();
+        const box = state.boxes.find(b => b.id === req.params.id);
         if (!box) {
           res.status(404).json({ error: 'Box not found' });
           return;
         }
+        
         const { command } = req.body;
-        const result = await openclawProvider.exec(box, command);
+        const provider = getProvider(box.provider);
+        const result = await provider.exec(box, Array.isArray(command) ? command : [command]);
+        
         res.json(result);
       } catch (error) {
         res.status(500).json({ error: String(error) });
       }
     });
 
-    // Get VNC info
+    // Get VNC/endpoints info
     this.app.get('/api/boxes/:id/vnc', async (req: Request, res: Response) => {
       try {
-        const box = await openclawProvider.get(req.params.id);
+        const state = this.loadState();
+        const box = state.boxes.find(b => b.id === req.params.id);
         if (!box) {
           res.status(404).json({ error: 'Box not found' });
           return;
         }
+        
+        const provider = getProvider(box.provider);
+        const endpoints = await provider.getEndpoints(box);
+        
         res.json({
-          vncUrl: `vnc://localhost:${box.ports?.vnc}`,
-          novncUrl: `http://localhost:${box.ports?.novnc}/vnc.html?autoconnect=true`,
+          provider: box.provider,
+          ...endpoints,
         });
+      } catch (error) {
+        res.status(500).json({ error: String(error) });
+      }
+    });
+
+    // Checkpoint (E2B only)
+    this.app.post('/api/boxes/:id/checkpoint', async (req: Request, res: Response) => {
+      try {
+        const state = this.loadState();
+        const box = state.boxes.find(b => b.id === req.params.id);
+        if (!box) {
+          res.status(404).json({ error: 'Box not found' });
+          return;
+        }
+        
+        const provider = getProvider(box.provider);
+        if (!('checkpoint' in provider)) {
+          res.status(400).json({ error: 'Provider does not support checkpoints' });
+          return;
+        }
+        
+        const { name } = req.body;
+        const snapshotId = await (provider as any).checkpoint(box, name || `checkpoint-${Date.now()}`);
+        
+        res.json({ snapshotId });
       } catch (error) {
         res.status(500).json({ error: String(error) });
       }
@@ -229,8 +338,8 @@ export class DashboardServer {
       this.clients.add(ws);
 
       // Send initial state
-      const boxes = await openclawProvider.list();
-      ws.send(JSON.stringify({ type: 'init', boxes }));
+      const state = this.loadState();
+      ws.send(JSON.stringify({ type: 'init', boxes: state.boxes }));
 
       ws.on('message', (data: Buffer) => {
         try {
@@ -250,25 +359,26 @@ export class DashboardServer {
     });
   }
 
-  private broadcast(message: object): void {
-    const payload = JSON.stringify(message);
+  private broadcast(message: any): void {
+    const json = JSON.stringify(message);
     for (const client of this.clients) {
       if (client.readyState === WebSocket.OPEN) {
-        client.send(payload);
+        client.send(json);
       }
     }
   }
 
   async start(): Promise<void> {
     return new Promise((resolve) => {
-      this.server.listen(this.port, '0.0.0.0', () => {
-        console.log(`Agent Observatory running at http://0.0.0.0:${this.port}`);
+      this.server.listen(this.port, () => {
+        console.log(`🚀 Agent Observatory API running on http://localhost:${this.port}`);
+        console.log(`   Dashboard: http://localhost:3456`);
         resolve();
       });
     });
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     this.wss.close();
     this.server.close();
   }

@@ -5,6 +5,7 @@
  */
 
 import { getPersonaById, generateAgentFiles, type AgentPersona } from './personas.js';
+import type { OpenClawBoxConfig, PortAllocation } from './providers/types.js';
 
 export interface ConfigInput {
   agentName: string;
@@ -28,7 +29,7 @@ export interface GeneratedConfig {
   credentialFiles: { [path: string]: string };
 }
 
-export function generateOpenClawConfig(input: ConfigInput): GeneratedConfig {
+export function generateOpenClawConfigLegacy(input: ConfigInput): GeneratedConfig {
   // Generate a random token for gateway auth
   const gatewayToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
   
@@ -243,4 +244,129 @@ Just deployed! Ready to start working.
 Waiting for first task.
 `,
   };
+}
+
+/**
+ * Generate OpenClaw config for providers (simpler interface)
+ */
+export function generateOpenClawConfig(
+  boxConfig: OpenClawBoxConfig,
+  ports: PortAllocation,
+  anthropicApiKey: string,
+  telegramUserId?: string
+): Record<string, unknown> {
+  const gatewayToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+  
+  const config: Record<string, unknown> = {
+    meta: {
+      lastTouchedVersion: '2026.6.11',
+      lastTouchedAt: new Date().toISOString(),
+    },
+    gateway: {
+      mode: 'local',
+      port: ports.gateway,
+      bind: 'lan',
+      auth: {
+        mode: 'token',
+        token: gatewayToken,
+      },
+    },
+    agents: {
+      defaults: {
+        model: {
+          primary: boxConfig.model || 'anthropic/claude-sonnet-4-6',
+          fallbacks: [],
+        },
+        workspace: '/home/agent/workspace',
+      },
+    },
+    browser: {
+      enabled: true,
+      defaultProfile: 'chromium',
+      ssrfPolicy: {
+        dangerouslyAllowPrivateNetwork: true,
+      },
+      profiles: {
+        chromium: {
+          cdpUrl: 'http://127.0.0.1:18800',
+          attachOnly: true,
+          color: '#4285F4',
+        },
+      },
+    },
+    tools: {
+      web: { search: {} },
+      exec: {
+        host: 'gateway',
+        security: 'full',
+      },
+    },
+    models: {
+      providers: {
+        anthropic: {
+          apiKey: anthropicApiKey,
+          api: 'anthropic-messages',
+          baseUrl: 'https://api.anthropic.com',
+        },
+      },
+      mode: 'merge',
+    },
+    session: {
+      scope: 'per-sender',
+      dmScope: 'per-channel-peer',
+      reset: {
+        mode: 'idle',
+        idleMinutes: 60,
+      },
+    },
+    messages: {
+      queue: {
+        mode: 'followup',
+        debounceMs: 500,
+      },
+    },
+    channels: {},
+  };
+
+  // Add Telegram channel if configured
+  if (boxConfig.channels?.telegram) {
+    const telegramConfig: Record<string, unknown> = {
+      enabled: true,
+      botToken: boxConfig.channels.telegram.botToken,
+      streaming: { mode: 'partial' },
+    };
+    
+    if (telegramUserId) {
+      telegramConfig.dmPolicy = 'allowlist';
+      telegramConfig.allowFrom = [telegramUserId];
+    } else {
+      telegramConfig.dmPolicy = 'open';
+    }
+    
+    (config.channels as Record<string, unknown>).telegram = telegramConfig;
+  }
+
+  return config;
+}
+
+/**
+ * Generate SOUL.md content for a persona
+ */
+export function generateSoulMd(boxConfig: OpenClawBoxConfig): string {
+  const persona = boxConfig.persona ? getPersonaById(boxConfig.persona.toLowerCase().replace(/\s+/g, '-')) : null;
+  
+  if (persona) {
+    return generateAgentFiles(persona, boxConfig.name)['SOUL.md'];
+  }
+
+  return `# SOUL.md - Who You Are
+
+*Your name is ${boxConfig.name}.*
+
+Be helpful, honest, and thorough. Ask clarifying questions when needed.
+
+---
+
+*This file defines who you are. Update it as you learn and grow.*
+`;
 }

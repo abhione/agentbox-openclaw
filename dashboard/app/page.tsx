@@ -28,6 +28,7 @@ interface Activity {
 }
 
 type LLMProvider = 'anthropic' | 'openai' | 'bedrock' | 'ollama';
+type InfraProvider = 'docker' | 'e2b';
 
 interface AgentPersona {
   id: string;
@@ -135,8 +136,9 @@ const PERSONAS: AgentPersona[] = [
 interface OnboardingData {
   // Step 1: Persona
   personaId: string;
-  // Step 2: Identity
+  // Step 2: Identity + Infrastructure
   agentName: string;
+  infraProvider: InfraProvider;
   // Step 3: LLM Provider & Credentials
   provider: LLMProvider;
   anthropicKey?: string;
@@ -407,6 +409,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
   const [data, setData] = useState<OnboardingData>({
     personaId: '',
     agentName: '',
+    infraProvider: 'docker',
     provider: 'anthropic',
     model: 'anthropic/claude-sonnet-4-6',
   });
@@ -440,24 +443,12 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           name: data.agentName.toLowerCase().replace(/[^a-z0-9-]/g, '-'),
-          config: { 
-            name: data.agentName, 
-            model: data.model,
-            persona: selectedPersona?.name 
-          },
+          provider: data.infraProvider,
           persona: data.personaId,
-          credentials: {
-            provider: data.provider,
-            anthropicKey: data.anthropicKey,
-            openaiKey: data.openaiKey,
-            bedrockAccessKey: data.bedrockAccessKey,
-            bedrockSecretKey: data.bedrockSecretKey,
-            bedrockRegion: data.bedrockRegion || 'us-east-1',
-            ollamaHost: data.ollamaHost,
-          },
           model: data.model,
+          anthropicApiKey: data.anthropicKey,
           telegramToken: data.telegramToken,
-          telegramAllowedUsers: data.telegramUserIds?.split(',').map(id => id.trim()).filter(Boolean),
+          telegramUserId: data.telegramUserIds?.split(',')[0]?.trim(),
         }),
       });
 
@@ -563,6 +554,35 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                     </button>
                   ))}
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-2">Where to run</label>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    onClick={() => updateData('infraProvider', 'docker')}
+                    className={`p-4 rounded-lg border text-left ${data.infraProvider === 'docker' ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 hover:border-zinc-600'}`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-2xl">🐳</span>
+                      <span className="font-medium">Local Docker</span>
+                    </div>
+                    <p className="text-xs text-zinc-500">Free • Runs on your machine</p>
+                  </button>
+                  <button
+                    onClick={() => updateData('infraProvider', 'e2b')}
+                    className={`p-4 rounded-lg border text-left ${data.infraProvider === 'e2b' ? 'border-blue-500 bg-blue-500/10' : 'border-zinc-700 hover:border-zinc-600'}`}
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-2xl">☁️</span>
+                      <span className="font-medium">E2B Cloud</span>
+                    </div>
+                    <p className="text-xs text-zinc-500">$0.05/hr • Isolated VM with GUI</p>
+                  </button>
+                </div>
+                {data.infraProvider === 'e2b' && (
+                  <p className="text-xs text-yellow-500 mt-2">⚠️ Requires E2B_API_KEY in ~/.agentbox/secrets.env</p>
+                )}
               </div>
 
               <div>

@@ -8,6 +8,9 @@ importers:
 
   .:
     dependencies:
+      '@e2b/desktop':
+        specifier: ^2.3.1
+        version: 2.3.1
       '@madarco/agentbox':
         specifier: '>=0.21.0'
         version: 0.21.0(ws@8.21.0)
@@ -20,6 +23,9 @@ importers:
       dockerode:
         specifier: ^4.0.2
         version: 4.0.12
+      e2b:
+        specifier: ^2.27.1
+        version: 2.31.0
       express:
         specifier: ^4.21.2
         version: 4.22.2
@@ -164,6 +170,10 @@ packages:
   '@daytonaio/sdk@0.179.0':
     resolution: {integrity: sha512-KZErEaClqW9arLb1xI78R/9T0eOGWSShcruszgwXP6MR53mVAFmmhQ/OOGFXpV+xQ8HYB1HYl0FcK2CTaxHNgA==}
     deprecated: 'Moved to @daytona/sdk, same API, no breaking changes. Please update: npm uninstall @daytonaio/sdk && npm i @daytona/sdk'
+
+  '@e2b/desktop@2.3.1':
+    resolution: {integrity: sha512-/WVgs4LpOk28PU9bzMkUWPdYVI0QBPVdclpXC99bsSeNTbG5QuWiS4tgznulzwW2HE0+etxzoOhkQ7fl0gagYw==}
+    engines: {node: '>=20.18.1'}
 
   '@esbuild/aix-ppc64@0.27.7':
     resolution: {integrity: sha512-EKX3Qwmhz1eMdEJokhALr0YiD0lhQNwDqkPYyPhiSwKrh7/4KRjQc04sZ8db+5DVVnZ1LmbNDI1uAMPEUBnQPg==}
@@ -2274,6 +2284,10 @@ snapshots:
       - debug
       - supports-color
       - ws
+
+  '@e2b/desktop@2.3.1':
+    dependencies:
+      e2b: 2.31.0
 
   '@esbuild/aix-ppc64@0.27.7':
     optional: true
