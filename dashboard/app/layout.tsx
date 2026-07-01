@@ -1,8 +1,9 @@
+import type { Metadata } from 'next';
 import './globals.css';
 
-export const metadata = {
-  title: 'Agent Observatory - OpenClaw',
-  description: 'Live visibility into your AI agents',
+export const metadata: Metadata = {
+  title: 'Agent Observatory',
+  description: 'Zoom for AI Agents - Monitor and manage your OpenClaw agents',
 };
 
 export default function RootLayout({
@@ -12,7 +13,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark">
-      <body className="antialiased">{children}</body>
+      <body className="bg-zinc-950 text-zinc-100 antialiased">
+        {children}
+      </body>
     </html>
   );
 }
