@@ -69,6 +69,8 @@ export interface CreateBoxRequest {
   };
   /** Full OpenClaw config JSON to inject into container */
   openclawConfig?: Record<string, unknown>;
+  /** Credential files to inject (anthropic-key, etc.) */
+  credentialFiles?: { [path: string]: string };
   /** Workspace files to inject (SOUL.md, MEMORY.md, etc.) */
   workspaceFiles?: { [path: string]: string };
   onLog?: (line: string) => void;
@@ -263,6 +265,12 @@ export class OpenClawProvider {
     await this.injectConfig(container, configToInject);
     req.onLog?.(`OpenClaw configured...`);
 
+    // Inject credential files (anthropic-key, etc.)
+    if (req.credentialFiles) {
+      await this.injectCredentialFiles(container, req.credentialFiles);
+      req.onLog?.(`Credentials configured`);
+    }
+
     // Inject workspace files (SOUL.md, MEMORY.md, etc.)
     if (req.workspaceFiles) {
       await this.injectWorkspaceFiles(container, req.workspaceFiles);
@@ -305,6 +313,20 @@ export class OpenClawProvider {
       User: 'root',
     });
     await exec.start({ Detach: false });
+  }
+
+  private async injectCredentialFiles(container: Docker.Container, files: { [path: string]: string }): Promise<void> {
+    for (const [filePath, content] of Object.entries(files)) {
+      const fullPath = `/home/agent/.openclaw/${filePath}`;
+      const dirPath = fullPath.substring(0, fullPath.lastIndexOf('/'));
+      const contentB64 = Buffer.from(content).toString('base64');
+      
+      const exec = await container.exec({
+        Cmd: ['sh', '-c', `mkdir -p ${dirPath} && echo '${contentB64}' | base64 -d > ${fullPath} && chmod 600 ${fullPath} && chown agent:agent ${fullPath}`],
+        User: 'root',
+      });
+      await exec.start({ Detach: false });
+    }
   }
 
   private async injectWorkspaceFiles(container: Docker.Container, files: { [path: string]: string }): Promise<void> {

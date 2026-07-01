@@ -2,7 +2,7 @@ import express, { type Express, type Request, type Response } from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer, type Server } from 'http';
 import { openclawProvider, type BoxRecord } from '../provider.js';
-import { generateOpenClawConfig, generateWorkspaceFiles } from '../config-generator.js';
+import { generateOpenClawConfig, generateWorkspaceFiles, type GeneratedConfig } from '../config-generator.js';
 import * as path from 'path';
 import * as fs from 'fs';
 
@@ -57,11 +57,16 @@ export class DashboardServer {
       res.json({ status: 'ok', version: '0.1.0' });
     });
 
-    // List boxes
+    // List boxes with state
     this.app.get('/api/boxes', async (req: Request, res: Response) => {
       try {
-        const boxes = await openclawProvider.list();
-        res.json(boxes);
+        const boxes = openclawProvider.list();
+        // Enrich with current state
+        const enriched = await Promise.all(boxes.map(async (box) => {
+          const state = await openclawProvider.probeState(box);
+          return { ...box, state };
+        }));
+        res.json(enriched);
       } catch (error) {
         res.status(500).json({ error: String(error) });
       }
@@ -93,15 +98,17 @@ export class DashboardServer {
           credentials,
           model,
           telegramToken,
+          telegramAllowedUsers,
         } = req.body;
 
-        // Generate proper OpenClaw config
-        const openclawConfig = generateOpenClawConfig({
+        // Generate proper OpenClaw config and credential files
+        const generated = generateOpenClawConfig({
           agentName: config?.name || name,
           model: model || 'anthropic/claude-sonnet-4-20250514',
           provider: credentials?.provider || 'anthropic',
           credentials: credentials || {},
           telegramToken,
+          telegramAllowedUsers,
           personaId: persona,
         });
 
@@ -121,7 +128,8 @@ export class DashboardServer {
           image,
           vnc: { enabled: true },
           providerOptions: { openclawConfig: config },
-          openclawConfig,
+          openclawConfig: generated.openclawConfig,
+          credentialFiles: generated.credentialFiles,
           workspaceFiles,
           onLog: (line) => this.broadcast({ type: 'log', boxId: name, data: line }),
         });

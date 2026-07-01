@@ -19,18 +19,27 @@ export interface ConfigInput {
     ollamaHost?: string;
   };
   telegramToken?: string;
+  telegramAllowedUsers?: string[];
   personaId?: string;
 }
 
-export function generateOpenClawConfig(input: ConfigInput): Record<string, unknown> {
+export interface GeneratedConfig {
+  openclawConfig: Record<string, unknown>;
+  credentialFiles: { [path: string]: string };
+}
+
+export function generateOpenClawConfig(input: ConfigInput): GeneratedConfig {
+  // Generate a random token for gateway auth
+  const gatewayToken = Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+  
   const config: Record<string, unknown> = {
     meta: {
-      lastTouchedVersion: '2026.6.5',
+      lastTouchedVersion: '2026.6.11',
       lastTouchedAt: new Date().toISOString(),
     },
     wizard: {
       lastRunAt: new Date().toISOString(),
-      lastRunVersion: '2026.6.5',
+      lastRunVersion: '2026.6.11',
       lastRunCommand: 'agentbox-deploy',
       lastRunMode: 'local',
     },
@@ -38,6 +47,10 @@ export function generateOpenClawConfig(input: ConfigInput): Record<string, unkno
       mode: 'local',
       port: 18789,
       bind: 'lan',
+      auth: {
+        mode: 'token',
+        token: gatewayToken,
+      },
     },
     agents: {
       defaults: {
@@ -46,10 +59,6 @@ export function generateOpenClawConfig(input: ConfigInput): Record<string, unkno
           fallbacks: [],
         },
         workspace: '/home/agent/workspace',
-        memorySearch: {
-          sources: ['memory'],
-          provider: 'disabled',
-        },
       },
     },
     browser: {
@@ -59,19 +68,17 @@ export function generateOpenClawConfig(input: ConfigInput): Record<string, unkno
         chromium: {
           driver: 'openclaw',
           cdpUrl: 'http://127.0.0.1:18800',
+          color: '#4285F4',
         },
       },
     },
     tools: {
-      exec: {
-        security: 'permissive',
-        host: 'gateway',
-      },
-      browser: {
-        enabled: true,
-      },
       web: {
         search: {},
+      },
+      exec: {
+        host: 'gateway',
+        security: 'full',
       },
     },
     auth: {
@@ -90,29 +97,35 @@ export function generateOpenClawConfig(input: ConfigInput): Record<string, unkno
     env: {},
   };
 
-  // Add auth profile based on provider
+  // Credential files to inject
+  const credentialFiles: { [path: string]: string } = {};
+
+  // Auth profiles - token is stored in separate file
   const authProfiles = (config.auth as { profiles: Record<string, unknown> }).profiles;
   
   if (input.provider === 'anthropic' && input.credentials.anthropicKey) {
     authProfiles['anthropic:default'] = {
       provider: 'anthropic',
       mode: 'token',
-      token: input.credentials.anthropicKey,
     };
+    credentialFiles['credentials/anthropic-key'] = input.credentials.anthropicKey;
   } else if (input.provider === 'openai' && input.credentials.openaiKey) {
     authProfiles['openai:default'] = {
       provider: 'openai',
       mode: 'token',
-      token: input.credentials.openaiKey,
     };
+    credentialFiles['credentials/openai-key'] = input.credentials.openaiKey;
   } else if (input.provider === 'bedrock' && input.credentials.bedrockAccessKey) {
     authProfiles['bedrock:default'] = {
       provider: 'bedrock',
       mode: 'iam',
-      accessKeyId: input.credentials.bedrockAccessKey,
-      secretAccessKey: input.credentials.bedrockSecretKey,
       region: input.credentials.bedrockRegion || 'us-east-1',
     };
+    // Bedrock uses AWS credential files
+    credentialFiles['credentials/bedrock-credentials'] = `[default]
+aws_access_key_id = ${input.credentials.bedrockAccessKey}
+aws_secret_access_key = ${input.credentials.bedrockSecretKey}
+region = ${input.credentials.bedrockRegion || 'us-east-1'}`;
   } else if (input.provider === 'ollama') {
     authProfiles['ollama:default'] = {
       provider: 'ollama',
@@ -122,17 +135,26 @@ export function generateOpenClawConfig(input: ConfigInput): Record<string, unkno
 
   // Add Telegram channel if configured
   if (input.telegramToken) {
-    (config.channels as Record<string, unknown>).telegram = {
+    const telegramConfig: Record<string, unknown> = {
       enabled: true,
       botToken: input.telegramToken,
-      dmPolicy: 'open',
       streaming: {
         mode: 'partial',
       },
     };
+    
+    // If allowed users specified, use allowlist policy
+    if (input.telegramAllowedUsers && input.telegramAllowedUsers.length > 0) {
+      telegramConfig.dmPolicy = 'allowlist';
+      telegramConfig.allowFrom = input.telegramAllowedUsers;
+    } else {
+      telegramConfig.dmPolicy = 'open';
+    }
+    
+    (config.channels as Record<string, unknown>).telegram = telegramConfig;
   }
 
-  return config;
+  return { openclawConfig: config, credentialFiles };
 }
 
 export function generateWorkspaceFiles(input: ConfigInput): { [path: string]: string } {

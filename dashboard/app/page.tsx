@@ -148,6 +148,7 @@ interface OnboardingData {
   model: string;
   // Step 4: Channels
   telegramToken?: string;
+  telegramUserIds?: string;
 }
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3457';
@@ -456,6 +457,7 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
           },
           model: data.model,
           telegramToken: data.telegramToken,
+          telegramAllowedUsers: data.telegramUserIds?.split(',').map(id => id.trim()).filter(Boolean),
         }),
       });
 
@@ -765,6 +767,23 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
                 />
                 <p className="text-xs text-zinc-500 mt-1">Create a bot via @BotFather on Telegram</p>
               </div>
+
+              {data.telegramToken && (
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1">Allowed Telegram User IDs</label>
+                  <input
+                    type="text"
+                    value={data.telegramUserIds || ''}
+                    onChange={(e) => updateData('telegramUserIds', e.target.value)}
+                    placeholder="8576132014, 123456789"
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
+                  />
+                  <p className="text-xs text-zinc-500 mt-1">
+                    Comma-separated user IDs. Only these users can message the agent. 
+                    <a href="https://t.me/userinfobot" target="_blank" rel="noopener" className="text-blue-400 hover:underline ml-1">Get your ID</a>
+                  </p>
+                </div>
+              )}
 
               <div className="p-4 bg-zinc-800 rounded-lg">
                 <h4 className="font-medium mb-3">Summary</h4>
