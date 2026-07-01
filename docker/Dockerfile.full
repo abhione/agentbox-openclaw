@@ -8,6 +8,8 @@ LABEL description="OpenClaw agent container with VNC screen sharing"
 
 # Install all dependencies in one layer
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    # Process utilities
+    procps \
     # Basic tools
     curl wget git ca-certificates gnupg \
     # VNC and desktop
@@ -42,8 +44,8 @@ RUN npx playwright install chromium --with-deps || true
 COPY --chown=agent:agent vnc/xstartup /home/agent/.vnc/xstartup
 RUN chmod +x /home/agent/.vnc/xstartup
 
-# Supervisor config for process management
-COPY supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+# Supervisor config for process management (needs read perms for all)
+COPY --chmod=644 supervisor/supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
 # Entrypoint
 COPY --chmod=755 entrypoint.sh /entrypoint.sh
@@ -55,13 +57,13 @@ COPY --chmod=755 entrypoint.sh /entrypoint.sh
 # 6080  - noVNC (web)
 EXPOSE 18789 18791 5901 6080
 
-USER agent
-WORKDIR /workspace
-
-# Pre-create config structure
+# Pre-create config structure as root, then set permissions
 RUN mkdir -p /home/agent/.openclaw/workspace \
     /home/agent/.openclaw/credentials \
-    /home/agent/.openclaw/agents
+    /home/agent/.openclaw/agents && \
+    chown -R agent:agent /home/agent/.openclaw
+
+WORKDIR /workspace
 
 ENV DISPLAY=:1
 ENV HOME=/home/agent
