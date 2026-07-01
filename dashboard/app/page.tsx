@@ -26,7 +26,41 @@ interface Activity {
   timestamp: string;
 }
 
+type LLMProvider = 'anthropic' | 'openai' | 'bedrock' | 'ollama';
+
+interface OnboardingData {
+  name: string;
+  provider: LLMProvider;
+  anthropicKey?: string;
+  openaiKey?: string;
+  bedrockAccessKey?: string;
+  bedrockSecretKey?: string;
+  bedrockRegion?: string;
+  ollamaHost?: string;
+  model: string;
+  telegramToken?: string;
+}
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3456';
+
+const MODEL_OPTIONS: Record<LLMProvider, { value: string; label: string }[]> = {
+  anthropic: [
+    { value: 'anthropic/claude-sonnet-4-20250514', label: 'Claude Sonnet 4' },
+    { value: 'anthropic/claude-opus-4-5', label: 'Claude Opus 4.5' },
+  ],
+  openai: [
+    { value: 'openai/gpt-4o', label: 'GPT-4o' },
+    { value: 'openai/gpt-4o-mini', label: 'GPT-4o Mini' },
+  ],
+  bedrock: [
+    { value: 'bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0', label: 'Claude Sonnet 4 (Bedrock)' },
+    { value: 'bedrock/us.anthropic.claude-opus-4-20250514-v1:0', label: 'Claude Opus 4 (Bedrock)' },
+  ],
+  ollama: [
+    { value: 'ollama/llama3.3', label: 'Llama 3.3' },
+    { value: 'ollama/qwen2.5', label: 'Qwen 2.5' },
+  ],
+};
 
 export default function Dashboard() {
   const [boxes, setBoxes] = useState<AgentBox[]>([]);
@@ -38,7 +72,6 @@ export default function Dashboard() {
   const wsRef = useRef<WebSocket | null>(null);
   const activityEndRef = useRef<HTMLDivElement>(null);
 
-  // Fetch boxes
   const fetchBoxes = useCallback(async () => {
     try {
       const res = await fetch(`${API_BASE}/api/boxes`);
@@ -53,46 +86,22 @@ export default function Dashboard() {
     }
   }, []);
 
-  // WebSocket connection
   useEffect(() => {
     const ws = new WebSocket(`ws://localhost:3456`);
     wsRef.current = ws;
 
-    ws.onopen = () => {
-      console.log('WebSocket connected');
-    };
-
     ws.onmessage = (event) => {
       const msg = JSON.parse(event.data);
-      
-      if (msg.type === 'init') {
-        setBoxes(msg.boxes);
-      } else if (msg.type === 'box:created' || msg.type === 'box:started' || msg.type === 'box:stopped') {
-        fetchBoxes();
-      } else if (msg.type === 'box:destroyed') {
-        setBoxes(prev => prev.filter(b => b.id !== msg.boxId));
-        if (selectedBox?.id === msg.boxId) {
-          setSelectedBox(null);
-        }
-      } else if (msg.messageType === 'activity' && msg.boxId === selectedBox?.id) {
+      if (msg.type === 'init') setBoxes(msg.boxes);
+      else if (msg.type?.startsWith('box:')) fetchBoxes();
+      else if (msg.messageType === 'activity' && msg.boxId === selectedBox?.id) {
         setActivities(prev => [...prev.slice(-99), { type: msg.type, data: msg.data, timestamp: msg.timestamp }]);
       }
     };
 
-    ws.onerror = () => {
-      setError('WebSocket connection failed');
-    };
-
-    ws.onclose = () => {
-      console.log('WebSocket disconnected');
-    };
-
-    return () => {
-      ws.close();
-    };
+    return () => ws.close();
   }, [fetchBoxes, selectedBox?.id]);
 
-  // Subscribe to selected box activity
   useEffect(() => {
     if (selectedBox && wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({ type: 'subscribe', boxId: selectedBox.id }));
@@ -100,14 +109,12 @@ export default function Dashboard() {
     }
   }, [selectedBox]);
 
-  // Initial fetch
   useEffect(() => {
     fetchBoxes();
     const interval = setInterval(fetchBoxes, 10000);
     return () => clearInterval(interval);
   }, [fetchBoxes]);
 
-  // Auto-scroll activity feed
   useEffect(() => {
     activityEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [activities]);
@@ -118,10 +125,7 @@ export default function Dashboard() {
       const url = action === 'destroy' 
         ? `${API_BASE}/api/boxes/${boxId}`
         : `${API_BASE}/api/boxes/${boxId}/${action}`;
-      
-      const res = await fetch(url, { method });
-      if (!res.ok) throw new Error(`Failed to ${action}`);
-      
+      await fetch(url, { method });
       fetchBoxes();
     } catch (err) {
       setError(err instanceof Error ? err.message : `Failed to ${action}`);
@@ -151,9 +155,8 @@ export default function Dashboard() {
         </div>
       </header>
 
-      {/* Main content */}
       <div className="flex-1 flex">
-        {/* Sidebar - Agent List */}
+        {/* Sidebar */}
         <aside className="w-80 border-r border-zinc-800 flex flex-col">
           <div className="p-4 border-b border-zinc-800">
             <h2 className="font-medium text-zinc-400">Agents ({boxes.length})</h2>
@@ -167,11 +170,7 @@ export default function Dashboard() {
             ) : boxes.length === 0 ? (
               <div className="p-4 text-center text-zinc-500">
                 No agents deployed yet.
-                <br />
-                <button 
-                  onClick={() => setShowCreateModal(true)}
-                  className="mt-2 text-blue-400 hover:underline"
-                >
+                <button onClick={() => setShowCreateModal(true)} className="mt-2 text-blue-400 hover:underline block mx-auto">
                   Deploy your first agent
                 </button>
               </div>
@@ -184,15 +183,11 @@ export default function Dashboard() {
                     selectedBox?.id === box.id ? 'bg-zinc-900 border-l-2 border-l-blue-500' : ''
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <StatusIndicator state={box.state} />
-                      <div>
-                        <h3 className="font-medium">{box.name}</h3>
-                        <p className="text-sm text-zinc-500">
-                          {box.config?.model?.split('/').pop() || 'default'}
-                        </p>
-                      </div>
+                  <div className="flex items-center gap-3">
+                    <StatusIndicator state={box.state} />
+                    <div>
+                      <h3 className="font-medium">{box.name}</h3>
+                      <p className="text-sm text-zinc-500">{box.config?.model?.split('/').pop() || 'default'}</p>
                     </div>
                   </div>
                   <div className="mt-2 flex gap-2 text-xs text-zinc-500">
@@ -206,58 +201,45 @@ export default function Dashboard() {
           </div>
         </aside>
 
-        {/* Main panel */}
+        {/* Main */}
         <main className="flex-1 flex flex-col">
           {selectedBox ? (
             <>
-              {/* Agent header */}
               <div className="p-4 border-b border-zinc-800 flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-semibold">{selectedBox.name}</h2>
-                  <p className="text-sm text-zinc-500">
-                    Container: {selectedBox.containerId?.slice(0, 12) || 'N/A'}
-                  </p>
+                  <p className="text-sm text-zinc-500">Container: {selectedBox.containerId?.slice(0, 12)}</p>
                 </div>
                 <div className="flex gap-2">
-                  {selectedBox.state === 'running' ? (
+                  {selectedBox.state === 'running' && (
                     <>
                       <a
-                        href={`http://localhost:${selectedBox.ports?.novnc}`}
+                        href={`http://localhost:${selectedBox.ports?.novnc}/vnc.html?autoconnect=true`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded text-sm transition-colors"
+                        className="px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 rounded text-sm"
                       >
                         🖥️ Open VNC
                       </a>
-                      <button
-                        onClick={() => handleAction(selectedBox.id, 'stop')}
-                        className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 rounded text-sm transition-colors"
-                      >
+                      <button onClick={() => handleAction(selectedBox.id, 'stop')} className="px-3 py-1.5 bg-yellow-600 hover:bg-yellow-700 rounded text-sm">
                         Stop
                       </button>
                     </>
-                  ) : (
-                    <button
-                      onClick={() => handleAction(selectedBox.id, 'start')}
-                      className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm transition-colors"
-                    >
+                  )}
+                  {selectedBox.state === 'stopped' && (
+                    <button onClick={() => handleAction(selectedBox.id, 'start')} className="px-3 py-1.5 bg-green-600 hover:bg-green-700 rounded text-sm">
                       Start
                     </button>
                   )}
-                  <button
-                    onClick={() => handleAction(selectedBox.id, 'destroy')}
-                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm transition-colors"
-                  >
+                  <button onClick={() => handleAction(selectedBox.id, 'destroy')} className="px-3 py-1.5 bg-red-600 hover:bg-red-700 rounded text-sm">
                     Destroy
                   </button>
                 </div>
               </div>
 
-              {/* Split view: VNC + Activity */}
               <div className="flex-1 flex">
-                {/* VNC Panel */}
                 <div className="flex-1 p-4">
-                  <div className="h-full vnc-frame">
+                  <div className="h-full bg-black rounded-lg overflow-hidden">
                     {selectedBox.state === 'running' ? (
                       <iframe
                         src={`http://localhost:${selectedBox.ports?.novnc}/vnc.html?autoconnect=true&resize=scale`}
@@ -269,10 +251,7 @@ export default function Dashboard() {
                         <div className="text-center">
                           <div className="text-4xl mb-2">📴</div>
                           <p>Agent is {selectedBox.state}</p>
-                          <button
-                            onClick={() => handleAction(selectedBox.id, 'start')}
-                            className="mt-4 px-4 py-2 bg-green-600 hover:bg-green-700 rounded transition-colors"
-                          >
+                          <button onClick={() => handleAction(selectedBox.id, 'start')} className="mt-4 px-4 py-2 bg-green-600 rounded">
                             Start Agent
                           </button>
                         </div>
@@ -281,27 +260,22 @@ export default function Dashboard() {
                   </div>
                 </div>
 
-                {/* Activity Feed */}
                 <div className="w-80 border-l border-zinc-800 flex flex-col">
                   <div className="p-3 border-b border-zinc-800">
                     <h3 className="font-medium text-sm text-zinc-400">Activity Feed</h3>
                   </div>
                   <div className="flex-1 overflow-y-auto p-3 space-y-2">
                     {activities.length === 0 ? (
-                      <p className="text-sm text-zinc-500 text-center py-4">
-                        No activity yet
-                      </p>
+                      <p className="text-sm text-zinc-500 text-center py-4">No activity yet</p>
                     ) : (
                       activities.map((activity, i) => (
-                        <div key={i} className="activity-item text-sm p-2 bg-zinc-900 rounded">
-                          <div className="flex items-center justify-between text-zinc-500 text-xs mb-1">
+                        <div key={i} className="text-sm p-2 bg-zinc-900 rounded">
+                          <div className="flex justify-between text-zinc-500 text-xs mb-1">
                             <span className="font-mono">{activity.type}</span>
                             <span>{new Date(activity.timestamp).toLocaleTimeString()}</span>
                           </div>
                           <pre className="text-zinc-300 whitespace-pre-wrap break-words text-xs">
-                            {typeof activity.data === 'string' 
-                              ? activity.data 
-                              : JSON.stringify(activity.data, null, 2)}
+                            {typeof activity.data === 'string' ? activity.data : JSON.stringify(activity.data, null, 2)}
                           </pre>
                         </div>
                       ))
@@ -323,64 +297,84 @@ export default function Dashboard() {
         </main>
       </div>
 
-      {/* Create Modal */}
       {showCreateModal && (
-        <CreateAgentModal
-          onClose={() => setShowCreateModal(false)}
-          onCreated={() => {
-            setShowCreateModal(false);
-            fetchBoxes();
-          }}
-        />
+        <CreateAgentModal onClose={() => setShowCreateModal(false)} onCreated={() => { setShowCreateModal(false); fetchBoxes(); }} />
       )}
     </div>
   );
 }
 
 function StatusIndicator({ state }: { state: AgentBox['state'] }) {
-  const colors = {
-    running: 'bg-green-500 status-running',
-    stopped: 'bg-zinc-500',
-    paused: 'bg-yellow-500',
-    missing: 'bg-red-500',
-  };
-
-  return (
-    <div className={`w-3 h-3 rounded-full ${colors[state]}`} title={state} />
-  );
+  const colors = { running: 'bg-green-500', stopped: 'bg-zinc-500', paused: 'bg-yellow-500', missing: 'bg-red-500' };
+  return <div className={`w-3 h-3 rounded-full ${colors[state]} ${state === 'running' ? 'animate-pulse' : ''}`} title={state} />;
 }
 
 function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
-  const [name, setName] = useState('');
-  const [model, setModel] = useState('anthropic/claude-sonnet-4-20250514');
-  const [telegramToken, setTelegramToken] = useState('');
+  const [step, setStep] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [data, setData] = useState<OnboardingData>({
+    name: '',
+    provider: 'anthropic',
+    model: 'anthropic/claude-sonnet-4-20250514',
+  });
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const updateData = (field: keyof OnboardingData, value: string) => {
+    setData(prev => {
+      const updated = { ...prev, [field]: value };
+      // Update model when provider changes
+      if (field === 'provider') {
+        updated.model = MODEL_OPTIONS[value as LLMProvider][0].value;
+      }
+      return updated;
+    });
+  };
+
+  const handleSubmit = async () => {
     setLoading(true);
     setError(null);
+
+    // Build OpenClaw config
+    const openclawConfig: Record<string, unknown> = {
+      gateway: { mode: 'local', port: 18789, bind: '0.0.0.0' },
+      models: { default: data.model },
+      tools: { exec: { enabled: true }, browser: { enabled: true } },
+      channels: {},
+    };
+
+    // Add auth based on provider
+    if (data.provider === 'anthropic' && data.anthropicKey) {
+      openclawConfig.auth = { anthropic: { apiKey: data.anthropicKey } };
+    } else if (data.provider === 'openai' && data.openaiKey) {
+      openclawConfig.auth = { openai: { apiKey: data.openaiKey } };
+    } else if (data.provider === 'bedrock' && data.bedrockAccessKey) {
+      openclawConfig.auth = {
+        bedrock: {
+          accessKeyId: data.bedrockAccessKey,
+          secretAccessKey: data.bedrockSecretKey,
+          region: data.bedrockRegion || 'us-east-1',
+        },
+      };
+    } else if (data.provider === 'ollama') {
+      openclawConfig.auth = { ollama: { host: data.ollamaHost || 'http://host.docker.internal:11434' } };
+    }
+
+    if (data.telegramToken) {
+      (openclawConfig.channels as Record<string, unknown>).telegram = { botToken: data.telegramToken };
+    }
 
     try {
       const res = await fetch(`${API_BASE}/api/boxes`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: name || `agent-${Date.now().toString(36)}`,
-          config: {
-            name,
-            model,
-            channels: telegramToken ? { telegram: { botToken: telegramToken } } : undefined,
-          },
+          name: data.name || `agent-${Date.now().toString(36)}`,
+          config: { name: data.name, model: data.model },
+          openclawConfig,
         }),
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        throw new Error(data.error || 'Failed to create agent');
-      }
-
+      if (!res.ok) throw new Error((await res.json()).error || 'Failed to create');
       onCreated();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create');
@@ -391,75 +385,197 @@ function CreateAgentModal({ onClose, onCreated }: { onClose: () => void; onCreat
 
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-md border border-zinc-800">
-        <h2 className="text-xl font-semibold mb-4">Deploy New Agent</h2>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-1">
-              Agent Name
-            </label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="my-agent"
-              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-            />
+      <div className="bg-zinc-900 rounded-xl p-6 w-full max-w-lg border border-zinc-800">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl font-semibold">Deploy New Agent</h2>
+          <div className="flex gap-1">
+            {[1, 2, 3].map(s => (
+              <div key={s} className={`w-2 h-2 rounded-full ${step >= s ? 'bg-blue-500' : 'bg-zinc-700'}`} />
+            ))}
           </div>
+        </div>
 
-          <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-1">
-              Model
-            </label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-            >
-              <option value="anthropic/claude-sonnet-4-20250514">Claude Sonnet 4</option>
-              <option value="anthropic/claude-opus-4-5">Claude Opus 4.5</option>
-              <option value="bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0">Bedrock Sonnet 4</option>
-              <option value="openai/gpt-4o">GPT-4o</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-zinc-400 mb-1">
-              Telegram Bot Token (optional)
-            </label>
-            <input
-              type="password"
-              value={telegramToken}
-              onChange={(e) => setTelegramToken(e.target.value)}
-              placeholder="123456:ABC-..."
-              className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
-            />
-          </div>
-
-          {error && (
-            <div className="p-3 bg-red-900/50 border border-red-700 rounded-lg text-sm text-red-200">
-              {error}
+        {step === 1 && (
+          <div className="space-y-4">
+            <p className="text-zinc-400 text-sm mb-4">Let's set up your agent. First, give it a name and choose your LLM provider.</p>
+            
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1">Agent Name</label>
+              <input
+                type="text"
+                value={data.name}
+                onChange={(e) => updateData('name', e.target.value)}
+                placeholder="my-agent"
+                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg focus:outline-none focus:border-blue-500"
+              />
             </div>
-          )}
 
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg transition-colors"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 rounded-lg transition-colors"
-            >
-              {loading ? 'Deploying...' : 'Deploy'}
-            </button>
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1">LLM Provider</label>
+              <select
+                value={data.provider}
+                onChange={(e) => updateData('provider', e.target.value)}
+                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
+              >
+                <option value="anthropic">Anthropic (Claude)</option>
+                <option value="openai">OpenAI (GPT)</option>
+                <option value="bedrock">AWS Bedrock</option>
+                <option value="ollama">Ollama (Local)</option>
+              </select>
+            </div>
+
+            <div className="flex justify-end pt-4">
+              <button onClick={() => setStep(2)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg">
+                Next →
+              </button>
+            </div>
           </div>
-        </form>
+        )}
+
+        {step === 2 && (
+          <div className="space-y-4">
+            <p className="text-zinc-400 text-sm mb-4">Enter your API credentials for {data.provider}.</p>
+
+            {data.provider === 'anthropic' && (
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1">Anthropic API Key</label>
+                <input
+                  type="password"
+                  value={data.anthropicKey || ''}
+                  onChange={(e) => updateData('anthropicKey', e.target.value)}
+                  placeholder="sk-ant-..."
+                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
+                />
+                <p className="text-xs text-zinc-500 mt-1">Get your key at console.anthropic.com</p>
+              </div>
+            )}
+
+            {data.provider === 'openai' && (
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1">OpenAI API Key</label>
+                <input
+                  type="password"
+                  value={data.openaiKey || ''}
+                  onChange={(e) => updateData('openaiKey', e.target.value)}
+                  placeholder="sk-..."
+                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
+                />
+              </div>
+            )}
+
+            {data.provider === 'bedrock' && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1">AWS Access Key ID</label>
+                  <input
+                    type="password"
+                    value={data.bedrockAccessKey || ''}
+                    onChange={(e) => updateData('bedrockAccessKey', e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1">AWS Secret Access Key</label>
+                  <input
+                    type="password"
+                    value={data.bedrockSecretKey || ''}
+                    onChange={(e) => updateData('bedrockSecretKey', e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-zinc-400 mb-1">Region</label>
+                  <select
+                    value={data.bedrockRegion || 'us-east-1'}
+                    onChange={(e) => updateData('bedrockRegion', e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
+                  >
+                    <option value="us-east-1">US East (N. Virginia)</option>
+                    <option value="us-west-2">US West (Oregon)</option>
+                    <option value="eu-west-1">Europe (Ireland)</option>
+                  </select>
+                </div>
+              </>
+            )}
+
+            {data.provider === 'ollama' && (
+              <div>
+                <label className="block text-sm font-medium text-zinc-400 mb-1">Ollama Host</label>
+                <input
+                  type="text"
+                  value={data.ollamaHost || ''}
+                  onChange={(e) => updateData('ollamaHost', e.target.value)}
+                  placeholder="http://host.docker.internal:11434"
+                  className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
+                />
+                <p className="text-xs text-zinc-500 mt-1">Use host.docker.internal to reach your local Ollama</p>
+              </div>
+            )}
+
+            <div className="flex justify-between pt-4">
+              <button onClick={() => setStep(1)} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg">
+                ← Back
+              </button>
+              <button onClick={() => setStep(3)} className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded-lg">
+                Next →
+              </button>
+            </div>
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-4">
+            <p className="text-zinc-400 text-sm mb-4">Choose your model and optionally connect a chat channel.</p>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1">Model</label>
+              <select
+                value={data.model}
+                onChange={(e) => updateData('model', e.target.value)}
+                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
+              >
+                {MODEL_OPTIONS[data.provider].map(opt => (
+                  <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-zinc-400 mb-1">Telegram Bot Token (optional)</label>
+              <input
+                type="password"
+                value={data.telegramToken || ''}
+                onChange={(e) => updateData('telegramToken', e.target.value)}
+                placeholder="123456:ABC-..."
+                className="w-full px-3 py-2 bg-zinc-800 border border-zinc-700 rounded-lg"
+              />
+              <p className="text-xs text-zinc-500 mt-1">Connect a Telegram bot to chat with your agent</p>
+            </div>
+
+            {error && (
+              <div className="p-3 bg-red-900/50 border border-red-700 rounded-lg text-sm text-red-200">
+                {error}
+              </div>
+            )}
+
+            <div className="flex justify-between pt-4">
+              <button onClick={() => setStep(2)} className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 rounded-lg">
+                ← Back
+              </button>
+              <button
+                onClick={handleSubmit}
+                disabled={loading}
+                className="px-4 py-2 bg-green-600 hover:bg-green-700 disabled:opacity-50 rounded-lg"
+              >
+                {loading ? 'Deploying...' : '🚀 Deploy Agent'}
+              </button>
+            </div>
+          </div>
+        )}
+
+        <button onClick={onClose} className="absolute top-4 right-4 text-zinc-500 hover:text-white">
+          ✕
+        </button>
       </div>
     </div>
   );

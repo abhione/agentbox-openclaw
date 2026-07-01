@@ -88,7 +88,7 @@ export class DashboardServer {
     // Create box
     this.app.post('/api/boxes', async (req: Request, res: Response) => {
       try {
-        const { name, workspacePath, config, image } = req.body;
+        const { name, workspacePath, config, image, openclawConfig } = req.body;
         const result = await openclawProvider.create({
           name,
           workspacePath: workspacePath || process.cwd(),
@@ -96,6 +96,7 @@ export class DashboardServer {
           image,
           vnc: { enabled: true },
           providerOptions: { openclawConfig: config },
+          openclawConfig, // Full OpenClaw config with auth
           onLog: (line) => this.broadcast({ type: 'log', boxId: name, data: line }),
         });
         this.broadcast({ type: 'box:created', box: result.record });

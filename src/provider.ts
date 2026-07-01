@@ -67,6 +67,8 @@ export interface CreateBoxRequest {
     openclawConfig?: OpenClawBoxConfig;
     basePort?: number;
   };
+  /** Full OpenClaw config JSON to inject into container */
+  openclawConfig?: Record<string, unknown>;
   onLog?: (line: string) => void;
 }
 
@@ -254,8 +256,9 @@ export class OpenClawProvider {
     await container.start();
     req.onLog?.(`Container started: ${container.id.slice(0, 12)}`);
 
-    // Inject config and start services
-    await this.injectConfig(container, openclawConfig);
+    // Inject config - use provided openclawConfig if available, else build from options
+    const configToInject = req.openclawConfig || openclawConfig;
+    await this.injectConfig(container, configToInject);
     req.onLog?.(`OpenClaw configured and starting...`);
 
     return { record, imageBuilt: false };
