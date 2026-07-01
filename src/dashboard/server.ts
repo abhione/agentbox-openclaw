@@ -8,6 +8,8 @@ import express, { type Express, type Request, type Response } from 'express';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer, type Server } from 'http';
 import { openclawProvider, type BoxRecord } from '../provider.js';
+import * as path from 'path';
+import * as fs from 'fs';
 
 export interface DashboardServerOptions {
   port?: number;
@@ -48,6 +50,14 @@ export class DashboardServer {
       }
       next();
     });
+
+    // Serve static Next.js build if available
+    const staticDir = path.join(process.cwd(), 'dashboard', '.next', 'static');
+    const outDir = path.join(process.cwd(), 'dashboard', 'out');
+    
+    if (fs.existsSync(outDir)) {
+      this.app.use(express.static(outDir));
+    }
   }
 
   private setupRoutes(): void {

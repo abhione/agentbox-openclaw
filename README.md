@@ -1,270 +1,261 @@
-# @openclaw/agentbox
+# 🔭 Agent Observatory
 
-> **"Zoom for Agents"** — Run OpenClaw/Hermes agents in isolated containers with live VNC screen sharing.
+**Zoom for AI Agents** — Deploy, monitor, and watch OpenClaw agents work in real-time through VNC screen sharing.
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-
-Deploy AI agents in Docker containers with one command. Watch them work in real-time through VNC. Manage multiple agents from a unified dashboard.
-
-![Agent Observatory Dashboard](https://github.com/abhione/agentbox-openclaw/raw/main/docs/dashboard-preview.png)
+![Agent Observatory](https://img.shields.io/badge/status-beta-yellow) ![Docker](https://img.shields.io/badge/docker-required-blue) ![License](https://img.shields.io/badge/license-MIT-green)
 
 ## Features
 
+- 🖥️ **Live Screen Sharing** — Watch agents work in real-time via noVNC
+- 📋 **Agent Management** — Deploy, start, stop, destroy agents from a web UI
+- 🔐 **Multi-Provider Auth** — Anthropic, OpenAI, AWS Bedrock, Ollama
+- 📡 **Activity Feed** — Real-time WebSocket events
 - 🐳 **Docker Isolation** — Each agent runs in its own container
-- 📺 **VNC Screen Sharing** — See exactly what your agents see via noVNC web client
-- 🎛️ **Agent Observatory Dashboard** — Beautiful web UI for managing all your agents
-- 🔌 **AgentBox Compatible** — Works as a provider for the [AgentBox](https://agent-box.sh) ecosystem
-- 🔑 **Credential Management** — Secure injection of API keys and tokens
-- 📡 **Real-time Activity** — WebSocket streams for agent activity monitoring
-- ⚡ **One-Click Deploy** — Spawn new agents from the dashboard in seconds
+- 🎯 **One-Click Deploy** — Guided onboarding wizard
 
 ## Quick Start
 
 ```bash
-# Clone and install
+# Clone the repo
 git clone https://github.com/abhione/agentbox-openclaw.git
 cd agentbox-openclaw
+
+# Install dependencies
 pnpm install
+
+# Build
 pnpm build
 
-# Link the CLI globally
-npm link
+# Build Docker image
+cd docker && docker build -f Dockerfile.full -t openclaw/agentbox:full .
+cd ..
 
-# Build the Docker images
-pnpm docker:build          # Full image with VNC (2.4GB)
-# or
-pnpm docker:build:minimal  # Minimal image (746MB)
-
-# Deploy an agent
-claw-box deploy --name my-agent
-
-# Open the screen sharing
-claw-box vnc my-agent
-
-# Or start the full dashboard
-claw-box dashboard
+# Start the dashboard
+./start.sh
+# → Dashboard: http://localhost:3456
 ```
 
-## CLI Commands
+## Architecture
 
-```bash
-claw-box deploy [config.yaml]  # Deploy a new agent
-claw-box list                   # List all agent boxes
-claw-box status <name>          # Show agent status
-claw-box start <name>           # Start a stopped agent
-claw-box stop <name>            # Stop a running agent
-claw-box destroy <name>         # Remove an agent completely
-
-claw-box vnc <name>             # Open VNC screen sharing in browser
-claw-box shell <name>           # Interactive shell in container
-claw-box logs <name>            # Stream agent logs
-claw-box exec <name> <cmd>      # Execute command in agent
-
-claw-box dashboard              # Start the Agent Observatory web UI
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Agent Observatory                         │
+│                   http://localhost:3456                      │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────┐  ┌─────────────────────────────────────┐  │
+│  │  Agent List │  │         VNC Screen Viewer           │  │
+│  │             │  │    (embedded noVNC iframe)          │  │
+│  │  🟢 agent-1 │  │                                     │  │
+│  │  ⚪ agent-2 │  │    ┌─────────────────────────┐      │  │
+│  │  🟢 agent-3 │  │    │                         │      │  │
+│  │             │  │    │   Live Agent Desktop    │      │  │
+│  │ [+ Deploy]  │  │    │                         │      │  │
+│  └─────────────┘  │    └─────────────────────────┘      │  │
+│                   └─────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─────────────────────────────────────────────────────────────┐
+│                     Docker Containers                        │
+├─────────────────────────────────────────────────────────────┤
+│  ┌─────────────────┐  ┌─────────────────┐                   │
+│  │  agentbox-alpha │  │  agentbox-beta  │  ...              │
+│  │  ┌───────────┐  │  │  ┌───────────┐  │                   │
+│  │  │  OpenClaw │  │  │  │  OpenClaw │  │                   │
+│  │  │  Gateway  │  │  │  │  Gateway  │  │                   │
+│  │  └───────────┘  │  │  └───────────┘  │                   │
+│  │  ┌───────────┐  │  │  ┌───────────┐  │                   │
+│  │  │ VNC + X11 │  │  │  │ VNC + X11 │  │                   │
+│  │  │  Desktop  │  │  │  │  Desktop  │  │                   │
+│  │  └───────────┘  │  │  └───────────┘  │                   │
+│  │  ┌───────────┐  │  │  ┌───────────┐  │                   │
+│  │  │  noVNC    │──┼──│  │  noVNC    │  │                   │
+│  │  │  Proxy    │  │  │  │  Proxy    │  │                   │
+│  │  └───────────┘  │  │  └───────────┘  │                   │
+│  └─────────────────┘  └─────────────────┘                   │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-## Agent Observatory Dashboard
+## Port Allocation
 
-The dashboard provides a beautiful web interface for managing your agents:
+Each agent gets 4 ports, starting at 19000:
 
-- **Agent List** — See all agents with real-time status indicators
-- **VNC Viewer** — Embedded screen sharing right in the browser
-- **Activity Feed** — Live stream of agent activity
-- **One-Click Deploy** — Create new agents without touching the CLI
-- **WebSocket Updates** — Everything updates in real-time
+| Port | Service | Description |
+|------|---------|-------------|
+| base+0 | Gateway | OpenClaw API (18789 internal) |
+| base+1 | Browser Control | Playwright CDP (18791 internal) |
+| base+2 | VNC | TigerVNC server (5901 internal) |
+| base+3 | noVNC | Web-based VNC client (6080 internal) |
 
-### Starting the Dashboard
-
-```bash
-# Via CLI
-claw-box dashboard
-
-# Or programmatically
-node -e "
-import('./dist/index.js').then(m => {
-  new m.DashboardServer({ port: 3456 }).start();
-});
-"
-
-# Opens at http://localhost:3456
-```
-
-## Configuration File
-
-Create `agent.yaml`:
-
-```yaml
-name: sales-agent
-model: anthropic/claude-sonnet-4-20250514
-
-channels:
-  telegram:
-    botToken: "YOUR_BOT_TOKEN"
-
-credentials:
-  anthropic:
-    apiKey: "YOUR_API_KEY"
-  # Or use AWS Bedrock
-  bedrock:
-    accessKeyId: "..."
-    secretAccessKey: "..."
-
-workspace: /path/to/workspace
-memory: true
-vnc: true
-```
-
-Then deploy:
-
-```bash
-claw-box deploy agent.yaml
-```
-
-## Programmatic Usage
-
-```typescript
-import { openclawProvider, DashboardServer } from '@openclaw/agentbox';
-
-// Create a new agent box
-const result = await openclawProvider.create({
-  name: 'my-agent',
-  workspacePath: '/path/to/workspace',
-  projectRoot: '/path/to/workspace',
-  vnc: { enabled: true },
-  providerOptions: {
-    openclawConfig: {
-      name: 'my-agent',
-      model: 'anthropic/claude-sonnet-4-20250514',
-      channels: {
-        telegram: { botToken: process.env.BOT_TOKEN }
-      }
-    }
-  }
-});
-
-console.log(`VNC: http://localhost:${result.record.ports.novnc}`);
-
-// Start the dashboard
-const server = new DashboardServer({ port: 3456 });
-await server.start();
-
-// List all boxes
-const boxes = openclawProvider.list();
-
-// Inspect a box
-const info = await openclawProvider.inspect(box);
-
-// Execute command
-const result = await openclawProvider.exec(box, ['openclaw', 'status']);
-
-// Destroy when done
-await openclawProvider.destroy(box);
-```
+Example for first agent: `19000` (gateway), `19001` (browser), `19002` (vnc), `19003` (novnc)
 
 ## Dashboard API
 
-**REST Endpoints:**
+### Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | GET | `/health` | Health check |
-| GET | `/api/boxes` | List all boxes |
-| POST | `/api/boxes` | Create new box |
-| GET | `/api/boxes/:id` | Get box details |
-| POST | `/api/boxes/:id/start` | Start box |
-| POST | `/api/boxes/:id/stop` | Stop box |
-| DELETE | `/api/boxes/:id` | Destroy box |
-| POST | `/api/boxes/:id/exec` | Execute command |
-| GET | `/api/boxes/:id/vnc` | Get VNC URL |
+| GET | `/api/boxes` | List all agents |
+| GET | `/api/boxes/:id` | Get agent details |
+| POST | `/api/boxes` | Create new agent |
+| POST | `/api/boxes/:id/start` | Start agent |
+| POST | `/api/boxes/:id/stop` | Stop agent |
+| DELETE | `/api/boxes/:id` | Destroy agent |
+| POST | `/api/boxes/:id/exec` | Execute command in agent |
+| GET | `/api/boxes/:id/vnc` | Get VNC connection info |
 
-**WebSocket (ws://localhost:3456):**
+### WebSocket
+
+Connect to `ws://localhost:3456` for real-time events:
 
 ```javascript
 const ws = new WebSocket('ws://localhost:3456');
 
-// Subscribe to agent activity
-ws.send(JSON.stringify({ type: 'subscribe', boxId: 'my-agent' }));
-
-// Receive events
 ws.onmessage = (event) => {
   const msg = JSON.parse(event.data);
-  // { type: 'init', boxes: [...] }
-  // { type: 'box:created', box: {...} }
-  // { type: 'activity', boxId, data, timestamp }
+  // msg.type: 'init', 'box:created', 'box:started', 'box:stopped', 'activity'
 };
+
+// Subscribe to agent activity
+ws.send(JSON.stringify({ type: 'subscribe', boxId: 'agent-id' }));
+```
+
+## Creating an Agent
+
+### Via Dashboard UI
+
+1. Open http://localhost:3456
+2. Click **"+ Deploy Agent"**
+3. Follow the onboarding wizard:
+   - **Step 1:** Name your agent, choose LLM provider
+   - **Step 2:** Enter API credentials
+   - **Step 3:** Select model, optionally add Telegram bot
+4. Click **"🚀 Deploy Agent"**
+
+### Via API
+
+```bash
+curl -X POST http://localhost:3456/api/boxes \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-agent",
+    "openclawConfig": {
+      "gateway": { "mode": "local", "port": 18789, "bind": "0.0.0.0" },
+      "models": { "default": "anthropic/claude-sonnet-4-20250514" },
+      "auth": { "anthropic": { "apiKey": "sk-ant-..." } },
+      "tools": { "exec": { "enabled": true }, "browser": { "enabled": true } },
+      "channels": {}
+    }
+  }'
+```
+
+### Via CLI
+
+```bash
+# Deploy with defaults
+claw-box deploy --name my-agent
+
+# Deploy with specific model
+claw-box deploy --name my-agent --model anthropic/claude-opus-4-5
+
+# List agents
+claw-box list
+
+# Check status
+claw-box status my-agent
+
+# Open VNC in browser
+claw-box vnc my-agent
+
+# Stop agent
+claw-box stop my-agent
+
+# Destroy agent
+claw-box destroy my-agent
+```
+
+## LLM Provider Configuration
+
+### Anthropic (Claude)
+
+```json
+{
+  "auth": {
+    "anthropic": { "apiKey": "sk-ant-..." }
+  },
+  "models": {
+    "default": "anthropic/claude-sonnet-4-20250514"
+  }
+}
+```
+
+### OpenAI (GPT)
+
+```json
+{
+  "auth": {
+    "openai": { "apiKey": "sk-..." }
+  },
+  "models": {
+    "default": "openai/gpt-4o"
+  }
+}
+```
+
+### AWS Bedrock
+
+```json
+{
+  "auth": {
+    "bedrock": {
+      "accessKeyId": "AKIA...",
+      "secretAccessKey": "...",
+      "region": "us-east-1"
+    }
+  },
+  "models": {
+    "default": "bedrock/us.anthropic.claude-sonnet-4-20250514-v1:0"
+  }
+}
+```
+
+### Ollama (Local)
+
+```json
+{
+  "auth": {
+    "ollama": { "host": "http://host.docker.internal:11434" }
+  },
+  "models": {
+    "default": "ollama/llama3.3"
+  }
+}
 ```
 
 ## Docker Images
 
+### Full Image (Recommended)
+
+Includes VNC, noVNC, Chromium browser, and OpenClaw:
+
 ```bash
-# Build full image with VNC (recommended)
-docker build -f docker/Dockerfile.full -t openclaw/agentbox:full docker/
-
-# Build minimal image (no VNC)
-docker build -f docker/Dockerfile.minimal -t openclaw/agentbox:minimal docker/
+cd docker
+docker build -f Dockerfile.full -t openclaw/agentbox:full .
 ```
 
-### Image Contents
+**Size:** ~2.4GB  
+**Includes:** Node.js 22, OpenClaw, TigerVNC, noVNC, Chromium, Xfce4 terminal
 
-**Full Image (2.4GB):**
-- Node.js 22
-- OpenClaw CLI
-- TigerVNC + noVNC
-- Chromium (via Playwright)
-- Supervisor for process management
-- Openbox window manager
+### Minimal Image
 
-**Minimal Image (746MB):**
-- Node.js 22
-- OpenClaw CLI
-- Git, curl
+OpenClaw only, no VNC:
 
-## Port Allocation
-
-Each agent box uses 4 ports (starting at 19000 by default):
-
-| Port Offset | Service | Description |
-|-------------|---------|-------------|
-| +0 | Gateway | OpenClaw gateway (18789 internal) |
-| +1 | Browser Control | Browser automation (18791 internal) |
-| +2 | VNC | VNC server (5901 internal) |
-| +3 | noVNC | Web-based VNC (6080 internal) |
-
-Example: Agent deployed at base port 19000:
-- Gateway: http://localhost:19000
-- Browser: http://localhost:19001  
-- VNC: vnc://localhost:19002
-- noVNC: http://localhost:19003
-
-## Project Structure
-
-```
-agentbox-openclaw/
-├── src/
-│   ├── index.ts          # Package exports
-│   ├── provider.ts       # OpenClaw provider (AgentBox compatible)
-│   ├── cli.ts            # claw-box CLI
-│   └── dashboard/
-│       └── server.ts     # Dashboard REST + WebSocket server
-├── dashboard/
-│   └── app/
-│       ├── page.tsx      # React dashboard UI
-│       ├── layout.tsx    # App layout
-│       └── globals.css   # Tailwind styles
-├── docker/
-│   ├── Dockerfile.full   # Full image with VNC
-│   ├── Dockerfile.minimal # Minimal image
-│   ├── entrypoint.sh     # Container entrypoint
-│   ├── supervisor/       # Process management config
-│   └── vnc/              # VNC session setup
-└── dist/                 # Built output
+```bash
+docker build -f Dockerfile.minimal -t openclaw/agentbox:minimal .
 ```
 
-## Requirements
-
-- Docker (Docker Desktop or compatible)
-- Node.js 20+
-- pnpm
+**Size:** ~750MB
 
 ## Development
 
@@ -272,20 +263,93 @@ agentbox-openclaw/
 # Install dependencies
 pnpm install
 
-# Build
+# Build TypeScript
 pnpm build
 
 # Watch mode
 pnpm dev
 
-# Link CLI for local testing
-npm link
+# Start dashboard (development)
+cd dashboard && pnpm dev
+
+# Lint
+pnpm lint
 ```
+
+### Project Structure
+
+```
+agentbox-openclaw/
+├── src/
+│   ├── index.ts           # Package exports
+│   ├── provider.ts        # AgentBox provider implementation
+│   ├── cli.ts             # CLI commands
+│   ├── onboarding.ts      # Onboarding wizard logic
+│   └── dashboard/
+│       └── server.ts      # Express + WebSocket server
+├── dashboard/             # Next.js frontend
+│   ├── app/
+│   │   ├── page.tsx       # Main dashboard UI
+│   │   ├── layout.tsx     # Root layout
+│   │   └── globals.css    # Tailwind styles
+│   └── next.config.js     # Next.js config with API proxy
+├── docker/
+│   ├── Dockerfile.full    # Full image with VNC
+│   ├── Dockerfile.minimal # Minimal image
+│   ├── entrypoint.sh      # Container entrypoint
+│   ├── supervisor/        # Process manager config
+│   └── vnc/               # VNC startup scripts
+├── dist/                  # Compiled output
+└── start.sh               # Quick start script
+```
+
+## Troubleshooting
+
+### Dashboard not loading
+
+```bash
+# Check if services are running
+curl http://localhost:3456/health
+curl http://localhost:3457/health
+
+# Restart services
+./start.sh
+```
+
+### VNC not connecting
+
+```bash
+# Check container is running
+docker ps | grep agentbox
+
+# Check VNC is running inside container
+docker exec <container> ps aux | grep vnc
+
+# Check noVNC port
+curl http://localhost:<novnc-port>/
+```
+
+### Container keeps restarting
+
+```bash
+# Check logs
+docker logs <container-name>
+
+# Common issues:
+# - Invalid OpenClaw config (check auth section)
+# - Port already in use
+```
+
+## State Storage
+
+Agent state is persisted at `~/.agentbox/openclaw/boxes.json`
 
 ## License
 
-MIT © Abhi
+MIT
 
----
+## Related
 
-Built with ⚡ by the OpenClaw team
+- [OpenClaw](https://github.com/openclaw/openclaw) — The AI agent framework
+- [AgentBox](https://github.com/madarco/agentbox) — Sandboxed agent environments
+- [noVNC](https://github.com/novnc/noVNC) — HTML5 VNC client
