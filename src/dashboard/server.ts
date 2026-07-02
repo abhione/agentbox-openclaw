@@ -10,6 +10,7 @@ import {
   type ProviderName,
 } from '../providers/index.js';
 import { generateSoulMd } from '../config-generator.js';
+import { startVncProxy, publicVncUrl } from './vnc-proxy.js';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
@@ -29,6 +30,7 @@ export class DashboardServer {
   private app: Express;
   private server: Server;
   private wss: WebSocketServer;
+  private vncProxy: Server | null = null;
   private port: number;
   private clients: Set<WebSocket> = new Set();
   private subscriptions: Map<WebSocket, string> = new Map();
@@ -107,9 +109,9 @@ export class DashboardServer {
             try {
               const provider = getProvider(box.provider);
               const runtimeState = await provider.probeState(box);
-              return { ...box, state: runtimeState };
+              return { ...box, state: runtimeState, vncUrl: publicVncUrl(box) };
             } catch {
-              return { ...box, state: 'missing' as const };
+              return { ...box, state: 'missing' as const, vncUrl: publicVncUrl(box) };
             }
           })
         );
@@ -134,7 +136,7 @@ export class DashboardServer {
         const runtimeState = await provider.probeState(box);
         const endpoints = await provider.getEndpoints(box);
         
-        res.json({ ...box, state: runtimeState, endpoints });
+        res.json({ ...box, state: runtimeState, endpoints, vncUrl: publicVncUrl(box) });
       } catch (error) {
         res.status(500).json({ error: String(error) });
       }
@@ -193,7 +195,7 @@ export class DashboardServer {
         this.saveState(state);
 
         this.broadcast({ type: 'box:created', box: record });
-        res.json(record);
+        res.json({ ...record, vncUrl: publicVncUrl(record) });
       } catch (error) {
         console.error('Create box error:', error);
         res.status(500).json({ error: String(error) });
@@ -301,6 +303,7 @@ export class DashboardServer {
         res.json({
           provider: box.provider,
           ...endpoints,
+          vncUrl: publicVncUrl(box),
         });
       } catch (error) {
         res.status(500).json({ error: String(error) });
@@ -475,6 +478,16 @@ export class DashboardServer {
   }
 
   async start(): Promise<void> {
+    // Optional public VNC proxy (hosted deployments, e.g. Fly.io).
+    // Only started when a token is configured; the API itself stays private.
+    const vncToken = process.env.VNC_PROXY_TOKEN;
+    if (vncToken) {
+      this.vncProxy = startVncProxy({
+        token: vncToken,
+        port: parseInt(process.env.VNC_PROXY_PORT || '8080', 10),
+      });
+    }
+
     return new Promise((resolve) => {
       this.server.listen(this.port, () => {
         console.log(`🚀 Agent Observatory API running on http://localhost:${this.port}`);
@@ -487,5 +500,6 @@ export class DashboardServer {
   async stop(): Promise<void> {
     this.wss.close();
     this.server.close();
+    this.vncProxy?.close();
   }
 }
