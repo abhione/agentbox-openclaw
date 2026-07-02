@@ -21,6 +21,19 @@ import { generateOpenClawConfig, generateSoulMd } from '../config-generator.js';
 const DEFAULT_IMAGE = 'openclaw/agentbox:full';
 const STATE_DIR = path.join(os.homedir(), '.agentbox', 'openclaw');
 
+async function chownRecursive(dir: string, uid: number, gid: number): Promise<void> {
+  await fsPromises.chown(dir, uid, gid);
+  const entries = await fsPromises.readdir(dir, { withFileTypes: true });
+  for (const entry of entries) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      await chownRecursive(full, uid, gid);
+    } else {
+      await fsPromises.chown(full, uid, gid);
+    }
+  }
+}
+
 export class DockerProvider implements OpenClawProvider {
   readonly name = 'docker' as const;
   private docker: Docker;
@@ -78,6 +91,16 @@ export class DockerProvider implements OpenClawProvider {
     const soulPath = path.join(agentStateDir, 'workspace', 'SOUL.md');
     await fsPromises.mkdir(path.dirname(soulPath), { recursive: true });
     await fsPromises.writeFile(soulPath, soulMd);
+
+    // The container runs as user `agent` (uid 1001). When this server runs as
+    // root on Linux (e.g. hosted on Fly), the bind-mounted state dir must be
+    // owned by that uid or OpenClaw can't write ~/.openclaw/state. On macOS
+    // (Docker Desktop) ownership is remapped automatically — ignore failures.
+    try {
+      await chownRecursive(agentStateDir, 1001, 1001);
+    } catch {
+      // Not fatal on dev machines
+    }
 
     req.onLog?.('Pulling/checking image...');
     
