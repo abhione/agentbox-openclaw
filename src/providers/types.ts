@@ -55,6 +55,10 @@ export interface CreateBoxRequest {
   config: OpenClawBoxConfig;
   anthropicApiKey: string;
   telegramUserId?: string;
+  /** Custom agent workspace files (SOUL.md, AGENTS.md, etc.) — overrides default persona generation */
+  agentFiles?: Record<string, string>;
+  /** Raw onboarding answers (stored for re-deployment/debugging) */
+  onboardingAnswers?: Record<string, string | string[]>;
   onLog?: (msg: string) => void;
 }
 

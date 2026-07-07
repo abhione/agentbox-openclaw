@@ -86,11 +86,30 @@ export class DockerProvider implements OpenClawProvider {
     const configPath = path.join(agentStateDir, 'openclaw.json');
     await fsPromises.writeFile(configPath, JSON.stringify(openclawConfig, null, 2));
 
-    // Generate SOUL.md
-    const soulMd = generateSoulMd(req.config);
-    const soulPath = path.join(agentStateDir, 'workspace', 'SOUL.md');
-    await fsPromises.mkdir(path.dirname(soulPath), { recursive: true });
-    await fsPromises.writeFile(soulPath, soulMd);
+    // Set up workspace with agent files
+    const workspaceDir = path.join(agentStateDir, 'workspace');
+    await fsPromises.mkdir(workspaceDir, { recursive: true });
+    
+    // If custom agent files provided (from onboarding), use those
+    if (req.agentFiles && Object.keys(req.agentFiles).length > 0) {
+      req.onLog?.('Writing customized agent files from onboarding...');
+      for (const [filename, content] of Object.entries(req.agentFiles)) {
+        const filePath = path.join(workspaceDir, filename);
+        await fsPromises.mkdir(path.dirname(filePath), { recursive: true });
+        await fsPromises.writeFile(filePath, content);
+      }
+      
+      // Store onboarding answers for reference/re-deployment
+      if (req.onboardingAnswers) {
+        const answersPath = path.join(agentStateDir, 'onboarding-answers.json');
+        await fsPromises.writeFile(answersPath, JSON.stringify(req.onboardingAnswers, null, 2));
+      }
+    } else {
+      // Fall back to default persona-based generation
+      req.onLog?.('Generating default agent files from persona...');
+      const soulMd = generateSoulMd(req.config);
+      await fsPromises.writeFile(path.join(workspaceDir, 'SOUL.md'), soulMd);
+    }
 
     // The container runs as user `agent` (uid 1001). When this server runs as
     // root on Linux (e.g. hosted on Fly), the bind-mounted state dir must be

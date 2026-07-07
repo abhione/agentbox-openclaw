@@ -154,6 +154,8 @@ export class DashboardServer {
           anthropicApiKey,
           telegramToken,
           telegramUserId,
+          agentFiles,
+          onboardingAnswers,
         } = req.body;
 
         if (!name) {
@@ -186,6 +188,8 @@ export class DashboardServer {
           },
           anthropicApiKey,
           telegramUserId,
+          agentFiles,
+          onboardingAnswers,
           onLog: (line) => this.broadcast({ type: 'log', boxId: name, data: line }),
         });
 
