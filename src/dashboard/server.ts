@@ -328,14 +328,21 @@ export class DashboardServer {
           return;
         }
 
-        const { messages, stream } = (req.body ?? {}) as {
+        const { messages, stream, user } = (req.body ?? {}) as {
           messages?: Array<{ role: string; content: string }>;
           stream?: boolean;
+          user?: string;
         };
         if (!Array.isArray(messages) || messages.length === 0) {
           res.status(400).json({ error: 'messages array is required' });
           return;
         }
+        // Optional stable session key. The gateway's chat-completions endpoint
+        // is stateless per request; when the caller provides an OpenAI `user`
+        // string, the gateway derives a stable session from it so the agent
+        // keeps conversation context across turns.
+        const sessionUser =
+          typeof user === 'string' && user.trim().length > 0 ? user.trim().slice(0, 256) : undefined;
 
         // Agent runs can take a while (browser use, tool calls) — allow minutes.
         const controller = new AbortController();
@@ -354,6 +361,7 @@ export class DashboardServer {
               model: 'openclaw',
               messages,
               stream: !!stream,
+              ...(sessionUser ? { user: sessionUser } : {}),
             }),
             signal: controller.signal,
           });
