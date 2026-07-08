@@ -127,6 +127,11 @@ export function generateOpenClawConfig(answers: OnboardingAnswers): object {
       mode: 'local',
       port: 18789,
       bind: '0.0.0.0',
+      http: {
+        endpoints: {
+          chatCompletions: { enabled: true },
+        },
+      },
     },
     models: {
       default: answers.model || 'anthropic/claude-sonnet-4-20250514',

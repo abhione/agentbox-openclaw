@@ -297,6 +297,13 @@ export class OpenClawProvider {
       server: {
         port: 18789,
       },
+      gateway: {
+        http: {
+          endpoints: {
+            chatCompletions: { enabled: true },
+          },
+        },
+      },
       tools: {
         browser: {
           enabled: true,

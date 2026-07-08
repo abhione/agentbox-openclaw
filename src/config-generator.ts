@@ -52,6 +52,14 @@ export function generateOpenClawConfigLegacy(input: ConfigInput): GeneratedConfi
         mode: 'token',
         token: gatewayToken,
       },
+      // OpenAI-compatible chat endpoint (POST /v1/chat/completions on the
+      // gateway port, bearer = gateway token). Used by the Box Claws server
+      // to relay dashboard chat to the real agent (with its tools).
+      http: {
+        endpoints: {
+          chatCompletions: { enabled: true },
+        },
+      },
     },
     agents: {
       defaults: {
@@ -264,11 +272,20 @@ export function generateOpenClawConfig(
     },
     gateway: {
       mode: 'local',
-      port: ports.gateway,
+      // The gateway always listens on 18789 INSIDE the container; Docker maps
+      // it to ports.gateway on the host. (Using ports.gateway here would make
+      // the gateway unreachable through the published port.)
+      port: 18789,
       bind: 'lan',
       auth: {
         mode: 'token',
         token: gatewayToken,
+      },
+      // OpenAI-compatible chat endpoint for server-side chat relay.
+      http: {
+        endpoints: {
+          chatCompletions: { enabled: true },
+        },
       },
     },
     agents: {

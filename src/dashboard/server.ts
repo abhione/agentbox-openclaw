@@ -14,6 +14,7 @@ import { startVncProxy, publicVncUrl } from './vnc-proxy.js';
 import * as path from 'path';
 import * as fs from 'fs';
 import * as os from 'os';
+import { Readable } from 'stream';
 
 const STATE_DIR = path.join(os.homedir(), '.agentbox', 'openclaw');
 const STATE_FILE = path.join(STATE_DIR, 'boxes.json');
@@ -291,6 +292,100 @@ export class DashboardServer {
       }
     });
 
+    // Chat with the box's live OpenClaw agent.
+    // Proxies to the gateway's OpenAI-compatible POST /v1/chat/completions
+    // (gateway.http.endpoints.chatCompletions must be enabled in the box
+    // config). SECURITY: the gateway token is an operator-level credential —
+    // it is read server-side from the box's openclaw.json and must NEVER be
+    // returned to clients or included in error messages.
+    this.app.post('/api/boxes/:id/chat', async (req: Request, res: Response) => {
+      try {
+        const state = this.loadState();
+        const box = state.boxes.find(
+          b => b.id === req.params.id || b.name.toLowerCase() === req.params.id.toLowerCase()
+        );
+        if (!box) {
+          res.status(404).json({ error: 'Box not found' });
+          return;
+        }
+
+        const provider = getProvider(box.provider);
+        const runtimeState = await provider.probeState(box);
+        if (runtimeState !== 'running') {
+          res.status(409).json({ error: `Agent is not running (state: ${runtimeState})` });
+          return;
+        }
+
+        const gatewayPort = box.ports?.gateway;
+        if (!gatewayPort) {
+          res.status(500).json({ error: 'Box has no gateway port allocated' });
+          return;
+        }
+
+        const token = this.readGatewayToken(box);
+        if (!token) {
+          res.status(500).json({ error: 'Could not resolve gateway credentials for this box' });
+          return;
+        }
+
+        const { messages, stream } = (req.body ?? {}) as {
+          messages?: Array<{ role: string; content: string }>;
+          stream?: boolean;
+        };
+        if (!Array.isArray(messages) || messages.length === 0) {
+          res.status(400).json({ error: 'messages array is required' });
+          return;
+        }
+
+        // Agent runs can take a while (browser use, tool calls) — allow minutes.
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 300_000);
+        let upstream: globalThis.Response;
+        try {
+          upstream = await fetch(`http://127.0.0.1:${gatewayPort}/v1/chat/completions`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              Authorization: `Bearer ${token}`,
+            },
+            body: JSON.stringify({
+              // "openclaw" routes to the box's default agent (agent target,
+              // not a raw provider model id).
+              model: 'openclaw',
+              messages,
+              stream: !!stream,
+            }),
+            signal: controller.signal,
+          });
+        } catch (err) {
+          clearTimeout(timer);
+          const msg = controller.signal.aborted ? 'Agent chat timed out' : 'Could not reach the agent gateway';
+          res.status(502).json({ error: msg });
+          return;
+        }
+
+        res.status(upstream.status);
+        res.setHeader('Content-Type', upstream.headers.get('content-type') || 'application/json');
+        if (!upstream.body) {
+          clearTimeout(timer);
+          res.end();
+          return;
+        }
+        // Pipe through (works for both JSON and SSE streaming responses).
+        const nodeStream = Readable.fromWeb(upstream.body as import('stream/web').ReadableStream);
+        nodeStream.on('end', () => clearTimeout(timer));
+        nodeStream.on('error', () => {
+          clearTimeout(timer);
+          res.end();
+        });
+        nodeStream.pipe(res);
+      } catch (error) {
+        // Do not echo internals (could contain credentials) — log server-side.
+        console.error('Box chat error:', error);
+        res.status(500).json({ error: 'Agent chat failed' });
+      }
+    });
+
     // Get VNC/endpoints info
     this.app.get('/api/boxes/:id/vnc', async (req: Request, res: Response) => {
       try {
@@ -444,6 +539,23 @@ export class DashboardServer {
         res.status(500).json({ error: String(error) });
       }
     });
+  }
+
+  /**
+   * Read the gateway auth token for a box from its openclaw.json.
+   * The Docker provider bind-mounts /home/agent/.openclaw from
+   * ${STATE_DIR}/agents/<name>/, so the config is readable host-side.
+   * The token stays server-side — never expose it via any API response.
+   */
+  private readGatewayToken(box: BoxRecord): string | null {
+    try {
+      const configPath = path.join(STATE_DIR, 'agents', box.name.toLowerCase(), 'openclaw.json');
+      const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+      const token = config?.gateway?.auth?.token;
+      return typeof token === 'string' && token.length > 0 ? token : null;
+    } catch {
+      return null;
+    }
   }
 
   private setupWebSocket(): void {
